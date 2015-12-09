@@ -94,12 +94,14 @@ _do rm -rf $PKG
 # PackageMaker returns non-zero value even if it succeeds.
 # PackageMaker must be run by the user logged into the localhost desktop.
 #
-_run $PKGMKR -build -p $HERE/$PKG  \
-	-f $HERE/installer-files -r $HERE/installer-resources \
-	-i $HERE/info -d $HERE/description &
+
+_run pkgbuild \
+    --root . --scripts $HERE/installer-resources  \
+    --identifier pcp --version $PACKAGE \
+    $HERE/$PKG&
 wait
 
-if [ ! -d $HERE/$PKG ]
+if [ ! -f $HERE/$PKG ]
 then
     echo "$prog: Package generation failed"
     exit 1
