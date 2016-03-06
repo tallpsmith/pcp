@@ -7406,7 +7406,7 @@ else
   ;;
   *)
   as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
-as_dummy="$QTDIR/bin:/usr/bin:/usr/lib64/qt4/bin:/usr/lib/qt4/bin"
+as_dummy="$QTDIR/bin:/usr/bin:/usr/lib64/qt4/bin:/usr/lib/qt4/bin:/usr/local/bin:/usr/lib64/qt5/bin:/usr/lib/qt5/bin"
 for as_dir in $as_dummy
 do
   IFS=$as_save_IFS
@@ -8043,6 +8043,11 @@ $as_echo " yes (darwin 6.x)" >&6; }
 	    { $as_echo "$as_me:${as_lineno-$LINENO}: result:  yes (darwin 7.x)" >&5
 $as_echo " yes (darwin 7.x)" >&6; }
 	    package_maker=/Developer/Applications/Utilities/PackageMaker.app/Contents/MacOS/PackageMaker
+  elif test -x /usr/bin/pkgbuild
+  then # El Capitan or above, or... whatever..
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result:  yes (El Capitan/Other)" >&5
+  $as_echo " yes (El Capitan/Other)" >&6; }
+        package_maker=/usr/bin/pkgbuild
 	else
 	    { $as_echo "$as_me:${as_lineno-$LINENO}: result:  not found!" >&5
 $as_echo " not found!" >&6; }
@@ -16335,5 +16340,3 @@ if test -n "$ac_unrecognized_opts" && test "$enable_option_checking" != no; then
   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: unrecognized options: $ac_unrecognized_opts" >&5
 $as_echo "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
 fi
-
-
