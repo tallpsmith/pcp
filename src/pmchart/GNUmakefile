@@ -66,7 +66,6 @@ ifeq ($(WINDOW),mac)
 	$(INSTALL) -m 755 -d $(PKG_MAC_DIR)/MacOS
 	$(call INSTALL_QT_FRAMEWORKS,$(BINARY))
 	$(INSTALL) -m 755 $(BINARY) $(PKG_MAC_DIR)/MacOS/$(COMMAND)
-	rm $(BINARY)
 	$(INSTALL) -m 755 -d $(PKG_MAC_DIR)/Resources
 	$(INSTALL) -m 644 $(ICNFILE) $(PKG_MAC_DIR)/Resources/$(ICNFILE)
 	$(call INSTALL_QT_RESOURCES,$(PKG_MAC_DIR)/Resources)
