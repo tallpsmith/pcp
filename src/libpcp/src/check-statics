@@ -467,6 +467,7 @@ do
 		    -e 's/\([bds] \).*\.\([_a-zA-Z]\)/\1\2/' \
 		    -e 's/s _glib_relative_date\./s /' \
 		    -e '/ s EH_/d' \
+        -e '/ s fmt/d' \
 		    -e '/ b \.bss/d' \
 		    -e '/ d \.data/d' \
 		    -e '/ r \.rdata/d' \
