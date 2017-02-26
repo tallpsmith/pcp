@@ -13,6 +13,19 @@ QA_FLAGS = ""
 #QA_FLAGS = "022"
 #QA_FLAGS = "-g pmda.linux"
 
+# =================================================
+# Ensure some much needed plugins are installed
+# otherwise you'l go insane
+# =================================================
+[
+  { :name => "vagrant-scp", :version => ">= 0.5.7" },
+  { :name => "vagrant-vbguest", :version => ">= 0.13.0" },
+  { :name => "vagrant-cachier", :version => ">= 1.2.1"}
+].each do |plugin|
+  if not Vagrant.has_plugin?(plugin[:name], plugin[:version])
+    raise "#{plugin[:name]} #{plugin[:version]} is required. Please run `vagrant plugin install #{plugin[:name]}`"
+  end
+end
 
 
 ############################################################
