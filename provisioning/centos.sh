@@ -18,7 +18,8 @@ yum -y install git ncurses-devel readline-devel man libmicrohttpd-devel qt4-deve
 		perl-XML-TokeParser perl-ExtUtils-MakeMaker perl-Time-HiRes systemd-devel bc cairo-devel cyrus-sasl-devel \
 		systemd-devel libibumad-devel libibmad-devel papi-devel libpfm-devel rpm-devel perl-Spreadsheet-WriteExcel \
 		perl-Text-CSV_XS bind-utils httpd python-devel nspr-devel nss-devel python-ctypes nss-tools perl-Spreadsheet-XLSX \
-		ed cpan valgrind time xdpyinfo rrdtool-perl
+		ed cpan valgrind time xdpyinfo rrdtool-perl \
+		perl-LDAP perl-Date-Manip
 
 # Lots of avahi errors on Centos511, likely due to my environment
 # avahi-devel
