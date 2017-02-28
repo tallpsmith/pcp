@@ -13,6 +13,19 @@ QA_FLAGS = ""
 #QA_FLAGS = "022"
 #QA_FLAGS = "-g pmda.linux"
 
+# =================================================
+# Ensure some much needed plugins are installed
+# otherwise you'l go insane
+# =================================================
+[
+  { :name => "vagrant-scp", :version => ">= 0.5.7" },
+  { :name => "vagrant-vbguest", :version => ">= 0.13.0" },
+  { :name => "vagrant-cachier", :version => ">= 1.2.1"}
+].each do |plugin|
+  if not Vagrant.has_plugin?(plugin[:name], plugin[:version])
+    raise "#{plugin[:name]} #{plugin[:version]} is required. Please run `vagrant plugin install #{plugin[:name]}`"
+  end
+end
 
 
 ############################################################
@@ -168,24 +181,18 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |global_config|
     global_config.cache.scope = :box
   end
 
-  # Global shared folder for pcp source.  Copy it so we have our own to muck around in
-  global_config.vm.synced_folder ".", "/vagrant", type: "rsync", rsync_auto: false, :rsync__exclude => ["qaresults/"]
-
   pcp_hosts.each_pair do |name, options|
     global_config.vm.define name do |config|
 
        config.vm.provider "virtualbox" do |v|
           v.name = "Vagrant PCP - #{name}"
-          v.customize ["modifyvm", :id, "--groups", "/VagrantPCP", "--memory", VM_MEM, "--cpus", VM_CPU]
+            v.customize ["modifyvm", :id, "--groups", "/VagrantPCP", "--memory", VM_MEM, "--cpus", VM_CPU]
        end
 
        config.vm.box = options[:box]
 
        # VM specific shared folder for qa results
        # config.vm.synced_folder "./qaresults/#{name}", "/qaresults", mount_options: ["dmode=777", "fmode=666"], create: true
-
-       # TODO - this appears to fail with `vagrant provision osxsierra`
-       config.vm.synced_folder "./qaresults/#{name}", "/qaresults", create: true
 
        config.vm.hostname = "#{options[:hostname]}"
        config.vm.network :private_network, ip: options[:ipaddress]
@@ -195,6 +202,13 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |global_config|
 
        # Do platfrom specifics: install packages, etc
        config.vm.provision :shell, path: "provisioning/#{options[:script]}"
+
+       # shared folder for pcp source.  Copy it so we have our own to muck around in
+       # this is done _after_ the base per-os provisioning script so
+       # that the proper vagrant:vagrant user:group can be configured
+       # otherwise the rsync doesn't work properly..
+       config.vm.synced_folder ".", "/vagrant", type: "rsync", rsync_auto: false, :rsync__exclude => ["qaresults/"]
+       config.vm.synced_folder "./qaresults/#{name}", "/qaresults", create: true
 
        # Run QA and copy results back to host
        config.vm.provision :shell, :path => "provisioning/qa.sh"
