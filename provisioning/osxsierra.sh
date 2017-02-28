@@ -11,6 +11,12 @@
 #     * maybe using https://www.vagrantup.com/docs/provisioning/file.html to copy the Pkgbuild app?
 ############################################################
 
+# Ensure OSX has a `vagrant:vagrant` style user:group
+# otherwise rsync doesn't work properly...
+VAGRANT_GID=$(id -u vagrant)
+sudo dscl . -create /Groups/vagrant
+sudo dscl . -create /Groups/vagrant PrimaryGroupID $VAGRANT_GID
+sudo dscl . -create /Users/vagrant PrimaryGroupID $VAGRANT_GID
 
 
 # TODO replace this with an updated base-box
