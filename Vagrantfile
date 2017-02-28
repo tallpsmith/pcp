@@ -114,7 +114,7 @@ ok_to_use_OSX = platform_ok_to_use_OSX && eula_acknowledged
 ############################################################
 # Only allowed to use oxssierra image if the underlying platform
 # is a Mac and that the user has checked
-# 
+#
 # see OSXREADME.md for more details
 ############################################################
 if(ok_to_use_OSX)
@@ -169,7 +169,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |global_config|
   end
 
   # Global shared folder for pcp source.  Copy it so we have our own to muck around in
-  global_config.vm.synced_folder ".", "/vagrant", type: "rsync", rsync_auto: false, :rsync__exclude => ["qaresults/", "pcp-*"]
+  global_config.vm.synced_folder ".", "/vagrant", type: "rsync", rsync_auto: false, :rsync__exclude => ["qaresults/"]
 
   pcp_hosts.each_pair do |name, options|
     global_config.vm.define name do |config|
