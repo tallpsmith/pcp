@@ -9,9 +9,10 @@ The PCP build system is currently very slow (5-6 minutes) despite running on a 1
   - ✅ Fixed 5 high-priority libraries (libpcp, libpcp_static, libpcp_web, libpcp_fault, libpcp3)
   - ✅ Fixed 3 medium-priority tools (pmcpp, newhelp, pmieconf)
   - ✅ Fixed 6 low-priority tools (pmie, pmlogger, pmlogextract, pmlc, pmlogrewrite, dbpmda)
-- 🔄 **Phase 3 NEXT**: Remove top-level sequential loop to unlock additional parallelism
+- ✅ **Phase 3A COMPLETED**: Refactored src/GNUmakefile for parallel subdirectory builds (238s, 22% improvement total)
+- 🔄 **Phase 3B NEXT**: Refactor top-level GNUmakefile for additional 2-5% improvement
 - **Baseline confirmed**: 304 seconds (5m 4s) on 12-core Apple Silicon Mac
-- **Current best**: 252 seconds (4m 12s) with Phase 1+2 - **17% improvement**
+- **Current best**: 238 seconds (3m 58s) with Phase 1+2+3A - **22% improvement**
 
 ## Standard Build Command for Testing
 ```bash
@@ -156,7 +157,7 @@ getdate.h getdate.tab.c: getdate.y
   
 ### Phase 3: Improve Top-Level Parallelization (Advanced)
 **Expected speedup: +10-20% additional | Effort: 4-6 hours | Risk: Medium-High**
-**Status:** Not started - analysis complete, ready for implementation
+**Status:** 🔄 **Stage 3A COMPLETED** - src/GNUmakefile refactored, Stage 3B pending
 
 #### Problem Analysis
 
@@ -225,8 +226,64 @@ Apply same approach to top-level subdirectory iteration.
 **Risk factors:**
 - Breaking dependency order could cause race conditions
 - Must preserve backwards compatibility
-- May need platform-specific testing (macOS, Linux, etc.)  
-  
+- May need platform-specific testing (macOS, Linux, etc.)
+
+#### Stage 3A Results (2026-01-05) ✅ COMPLETED
+
+**Implementation:**
+Modified `src/GNUmakefile` to use modern GNU make parallel pattern:
+- Converted subdirectories to phony targets (`.PHONY: $(SUBDIRS)`)
+- Used target-specific variables for default_pcp and install_pcp targets
+- Added `+` prefix for jobserver coordination across recursive make calls
+- Discovered and fixed hidden dependency: `libpcp_static` depends on `libpcp` (they share source files via symlinks)
+
+**Key Code Changes (src/GNUmakefile:162-193):**
+```makefile
+.PHONY: $(SUBDIRS)
+
+default_pcp: TARGET = default_pcp
+default_pcp: $(SUBDIRS)
+
+install_pcp: TARGET = install_pcp
+install_pcp: $(SUBDIRS)
+
+$(SUBDIRS):
+	+@if [ -d "$@" -a -f "$@/GNUmakefile" ]; then \
+		echo === $@ ===; \
+		$(MAKE) $(MAKEOPTS) -C $@ $(TARGET) || exit $$?; \
+	fi
+
+# Fixed hidden dependency
+libpcp_static: libpcp  # Cannot build in parallel, share source
+```
+
+**Test Results:**
+- ✅ Serial build: 284.70s (verified correctness)
+- ✅ Parallel build: 228.93s with `-j12`
+- ✅ Repeatability: 3 consecutive successful builds (237.08s, 228.77s, 248.83s)
+- ✅ Average: 238.23s
+- ✅ No race conditions detected
+
+**Speedup Analysis:**
+- **Phase 2 baseline**: 255.33s
+- **Phase 3A result**: 238.23s (average of 3 runs)
+- **Phase 3A improvement**: 17.1 seconds (~7% additional)
+- **Combined Phase 1+2+3A**: 304s → 238.23s = **21.6% total improvement**
+
+**What This Achieved:**
+- 13 libraries in `LIBS_SUBDIRS` now build in parallel (after pmns completes)
+- ~100 tools in `OTHER_SUBDIRS` now build in parallel (after libs complete)
+- Make's jobserver properly coordinates `-j12` across all recursive make calls
+- Dependency chain preserved: include → libpcp → libpcp_static → pmns → libs (parallel) → tools (parallel)
+
+**Issues Discovered & Resolved:**
+1. **Race condition**: libpcp and libpcp_static tried to build in parallel but share source directory
+   - **Solution**: Added explicit dependency `libpcp_static: libpcp`
+2. **Syntax issue**: `+` prefix must come before `@` in recipe (`+@command`, not `@+command`)
+
+**Next Steps:**
+Stage 3B: Apply same pattern to top-level `GNUmakefile` for additional 2-5% improvement
+
 ---  
   
 ### Phase 4: QA Test Parallelization (Future Work)  

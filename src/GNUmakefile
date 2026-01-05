@@ -159,15 +159,35 @@ default :: default_pcp
 
 include $(BUILDRULES)
 
-default_pcp : $(SUBDIRS)
-	$(SUBDIRS_MAKERULE)
+# Phase 3: Modern parallel build pattern
+# Declare subdirectories as phony targets to enable parallel builds
+.PHONY: $(SUBDIRS)
+
+# Use target-specific variables to pass the correct target to subdirectories
+default_pcp: TARGET = default_pcp
+default_pcp: $(SUBDIRS)
 
 install :: default_pcp install_pcp
 
-install_pcp : $(SUBDIRS)
-	$(SUBDIRS_MAKERULE)
+install_pcp: TARGET = install_pcp
+install_pcp: $(SUBDIRS)
 
+# Pattern rule for building each subdirectory
+# The + prefix enables jobserver coordination for parallel builds across recursive make
+$(SUBDIRS):
+	+@if [ -d "$@" -a -f "$@/GNUmakefile" ]; then \
+		echo === $@ ===; \
+		$(MAKE) $(MAKEOPTS) -C $@ $(TARGET) || exit $$?; \
+	fi
+
+# Dependency chain - controls build order while allowing parallelism within stages
+# Stage 1: include
+# Stage 2: libpcp, then libpcp_static (they share source, cannot run in parallel)
+# Stage 3: pmns
+# Stage 4: all LIBS_SUBDIRS (13 libraries can build in parallel)
+# Stage 5: all OTHER_SUBDIRS (~100 tools can build in parallel)
 $(LIBPCP_SUBDIR): $(INCLUDE_SUBDIR)
+libpcp_static: libpcp  # libpcp_static uses symlinks to libpcp source, must build after
 $(PMNS_SUBDIR): $(LIBPCP_SUBDIR)
 $(LIBS_SUBDIRS): $(PMNS_SUBDIR)
 $(OTHER_SUBDIRS): $(LIBS_SUBDIRS)
