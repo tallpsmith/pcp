@@ -48,7 +48,7 @@ install:	$(CMDTARGET)
 	$(INSTALL) -m 755 $(CMDTARGET) $(PCP_BIN_DIR)/$(CMDTARGET)
 	$(INSTALL) -S $(PCP_BIN_DIR)/$(CMDTARGET) $(PCP_BINADM_DIR)/$(CMDTARGET)
 
-.NOTPARALLEL:
+.NOTPARALLEL: gram.tab.h gram.tab.c
 YFLAGS += -v
 gram.tab.h gram.tab.c:	gram.y
 	$(YACC) -d -b `basename $< .y` $<

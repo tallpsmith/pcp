@@ -38,7 +38,7 @@ install:	$(CMDTARGET)
 dbpmda.o:	gram.h
 lex.o:		gram.tab.h
 
-.NOTPARALLEL:
+.NOTPARALLEL: gram.tab.h gram.tab.c
 gram.tab.h gram.tab.c:	gram.y
 
 gram.h:		gram.tab.h

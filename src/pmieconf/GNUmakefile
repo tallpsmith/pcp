@@ -41,8 +41,6 @@ LDIRT = local $(CMDTARGET) $(STATICTARGETS) rate-syscalls \
 	pmlogconf.tmp pmlogconf $(shell echo */GNUmakefile)
 LDIRDIRT = rules .pcp
 
-.NOTPARALLEL:
-
 default: $(CMDTARGET) $(STATICTARGETS) makefiles local pmlogconf
 
 # for src-link-pcp target from buildrules

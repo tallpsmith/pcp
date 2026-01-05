@@ -31,8 +31,6 @@ endif
 
 LDIRT = $(TARGETS) $(STATICTARGETS)
 
-.NOTPARALLEL:
-
 default:	$(TARGETS) $(STATICTARGETS)
 
 install:	default

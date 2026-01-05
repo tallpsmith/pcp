@@ -39,7 +39,7 @@ default:	$(TARGET) $(DUMPER)$(EXECSUFFIX)
 
 YFILES = grammar.y
 
-.NOTPARALLEL:
+.NOTPARALLEL: grammar.h grammar.tab.c
 grammar.h grammar.tab.c:	grammar.y
 	$(YACC) -d -b `basename $< .y` $< && cp `basename $@ .h`.tab.h $@
 
