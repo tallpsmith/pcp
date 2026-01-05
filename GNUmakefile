@@ -74,9 +74,7 @@ install :: default_pcp install_pcp
 pack_pcp : default_pcp
 	$(MAKE) -C build $@
 
-# Target-specific variable for install
-install_pcp: TARGET = install_pcp
-install_pcp: default_pcp $(SUBDIRS)
+install_pcp :  default_pcp
 	# install the common directories _once_
 	$(INSTALL) -m 755 -d $(PCP_VAR_DIR)
 	$(INSTALL) -m 755 -d $(PCP_SHARE_DIR)
@@ -129,6 +127,15 @@ ifneq "$(PACKAGE_DISTRIBUTION)" "debian"
 endif
 	$(INSTALL) -m 644 pcp.lsm $(DOCFILES) $(PCP_DOC_DIR)
 	$(INSTALL) -m 755 install-sh $(PCP_BINADM_DIR)/install-sh
+	#
+	# Install across subdirectories (serial for compatibility)
+	# The compilation phase (default_pcp) is parallelized; install is typically fast
+	@for d in `echo $(SUBDIRS)`; do \
+	    if test -d "$$d" ; then \
+		echo === $$d ===; \
+		$(MAKE) -C $$d $@ || exit $$?; \
+	    fi; \
+	done
 
 ifdef BUILDRULES
 include $(BUILDRULES)

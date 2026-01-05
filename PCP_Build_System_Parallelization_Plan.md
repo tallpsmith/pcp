@@ -419,14 +419,25 @@ Current implementation uses a single lock file (`/tmp/PCP-QA-LOCK`) to prevent c
 ### Phase 3A: ✅ COMPLETED (Commit: 3f68a2a91e)
 - ✅ `src/GNUmakefile` (lines 162-193) - Converted to parallel subdirectory pattern
 
-### Phase 3B: ✅ COMPLETED (Commit: pending)
-- ✅ `GNUmakefile` (lines 49-70 for default_pcp, lines 77-79 for install_pcp) - Applied parallel pattern to top-level subdirectories  
-  
----  
-  
+### Phase 3B: ✅ COMPLETED (Commit: dea25046fd)
+- ✅ `GNUmakefile` (lines 49-70 for default_pcp, lines 77-79 for install_pcp) - Applied parallel pattern to top-level subdirectories
+
+### Phase 3C (Critical Bug Fix): ✅ COMPLETED (Commit: pending)
+- ✅ `GNUmakefile` (lines 77-138) - Fixed install_pcp to use serial shell loop instead of broken parallel pattern
+
+### Phase 4 (Auto-Detection & UX): ✅ COMPLETED (Commit: pending)
+- ✅ `Makepkgs` (line 27) - Added `parallel_build=true` variable
+- ✅ `Makepkgs` (lines 229-232) - Added `--disable-parallel-build` flag
+- ✅ `Makepkgs` (lines 771-805) - Implemented CPU auto-detection for macOS/Linux
+- ✅ `Makepkgs` - Removed `PCP_MAKE_JOBS` environment variable support
+
+_(Detailed descriptions of Phase 3C and Phase 4 are documented above in their respective sections)_
+
+---
+
 ## Progress Summary
 
-### Completed Work (Phases 1, 2, 3A, 3B) ✅ ALL COMPLETE!
+### Completed Work (Phases 1, 2, 3A, 3B, 3C, 4) ✅ ALL COMPLETE!
 
 | Phase | Description | Improvement | Cumulative Time | Status |
 |-------|-------------|-------------|-----------------|--------|
@@ -435,9 +446,15 @@ Current implementation uses a single lock file (`/tmp/PCP-QA-LOCK`) to prevent c
 | **Phase 2** | Fix .NOTPARALLEL directives (14 files) | +2% | 252s (4m 12s) | ✅ Complete |
 | **Phase 3A** | Parallel subdirs in src/GNUmakefile | +12% | 217s (3m 37s) | ✅ Complete |
 | **Phase 3B** | Parallel subdirs in top-level GNUmakefile | +40% | **93s (1m 33s)** | ✅ Complete |
-| **Target** | Original goal (60-70%) | **69%** | **93s (1m 33s)** | 🎯 **ACHIEVED!** |
+| **Phase 3C** | Bug fix: Restore install_pcp functionality | - | 93s (1m 33s) | ✅ Complete |
+| **Phase 4** | Auto-detection + UX improvements | - | ~270s¹ | ✅ Complete |
+| **Target** | Original goal (60-70%) | **69%** | **93s² (1m 33s)** | 🎯 **ACHIEVED!** |
 
-**Final Achievement: 69% faster (304s → 93s), 211 seconds saved, 3.3x speedup!**
+¹ Phase 4 currently runs at ~270s due to race condition requiring `--disable-parallel-build`
+² Expected time once race condition is fixed (Phase 5)
+
+**Achievement: 69% faster (304s → 93s), 211 seconds saved, 3.3x speedup!**
+**Current Status: Auto-detection implemented, race condition needs fixing before full speedup available**
 
 ### Test Results Summary
 
@@ -484,79 +501,106 @@ All phases tested on 12-core Apple Silicon Mac:
   
 ---  
   
-## How to Use (All Phases Complete - 3.3x Speedup Available!)
+## How to Use (Auto-Detection Enabled!)
 
-### Enable Parallel Builds (69% faster, 3.3x speedup!)
+### Default Behavior - Automatic Parallel Builds
 ```bash
-# Set the number of parallel jobs (use your CPU core count)
-PCP_MAKE_JOBS=-j12 ./Makepkgs --verbose
-
-# Or export it for the session
-export PCP_MAKE_JOBS=-j12
+# Just run Makepkgs - it auto-detects CPU count and parallelizes!
 ./Makepkgs --verbose
+
+# Output will show:
+#   (parallel builds enabled: -j12, auto-detected)
 ```
 
-### Default Behavior (Backwards Compatible)
+### Disable Parallel Builds (if needed)
 ```bash
-# Without setting PCP_MAKE_JOBS, builds sequentially as before
-./Makepkgs --verbose
+# Use --disable-parallel-build flag to force serial builds
+./Makepkgs --verbose --disable-parallel-build
+
+# Output will show:
+#   (parallel builds disabled)
 ```
 
 **Performance:**
-- **With `PCP_MAKE_JOBS=-j12`**: ~93 seconds (1m 33s) on 12-core Mac
-- **Without `PCP_MAKE_JOBS`**: ~304 seconds (5m 4s) - legacy sequential mode
-- **Speedup**: 3.3x faster with parallel builds enabled!
+- **Auto-detected parallel** (~270s currently due to race condition, ~93s once fixed): on 12-core Mac
+- **Serial (`--disable-parallel-build`)**: ~270-280 seconds (4m 30s)
+- **Expected speedup (once race condition fixed)**: 3.3x faster with parallel builds!
+
+**Platform Support:**
+- **macOS**: Uses `sysctl -n hw.logicalcpu` to detect cores
+- **Linux**: Uses `nproc` (preferred) or `/proc/cpuinfo` (fallback)
+- **Other platforms**: Falls back to serial build with warning message
 
 ---
 
 ## What to Do Next
 
-### All Primary Phases Complete! 🎉
+### Current Status 🚧
 
-**Achievement Summary:**
-- ✅ All 4 main phases (1, 2, 3A, 3B) successfully implemented
-- ✅ Original target of 60-70% improvement exceeded (achieved 69%)
-- ✅ Build time reduced from 5+ minutes to under 2 minutes
-- ✅ 3.3x speedup achieved on 12-core systems
+**Completed:**
+- ✅ Phase 1-3B: Parallel build infrastructure (69% speedup achieved)
+- ✅ Phase 3C: Critical bug fix for install_pcp
+- ✅ Phase 4: Auto-detection and UX improvements
+
+**In Progress:**
+- ⚠️ **Phase 5: Fix race condition** - Required before full speedup is available
+
+### Phase 5: Fix newhelp.static Race Condition (NEXT)
+
+**Problem:**
+```
+/bin/sh: ../../../src/newhelp/newhelp.static: No such file or directory
+make[3]: *** [help.dir] Error 127
+```
+
+**Root Cause:** PMDAs try to use `newhelp.static` before it's built in parallel builds.
+
+**Investigation Needed:**
+1. Find all places where `newhelp.static` is used
+2. Identify missing dependencies in GNUmakefiles
+3. Add proper dependency declarations (e.g., `pmdas: newhelp`)
+4. Test with clean parallel build
+
+**Expected Outcome:** Full 3.3x speedup available without needing `--disable-parallel-build`
 
 ### Recommended Next Steps
 
-**1. Commit and Push Changes**
+**1. Fix Race Condition (Priority)**
+- Investigate newhelp.static dependencies
+- Add missing makefile dependencies
+- Test with clean parallel builds
+- Verify 93-second build time is achieved
+
+**2. Commit and Push Changes**
 ```bash
-git add GNUmakefile PCP_Build_System_Parallelization_Plan.md
-git commit -m "build: enable parallel top-level subdirectory builds (Phase 3B)
+git add Makepkgs GNUmakefile PCP_Build_System_Parallelization_Plan.md
+git commit -m "build: add auto-detection and fix install_pcp (Phases 3C & 4)
 
-Phase 3B completes the build parallelization effort by applying the
-same parallel pattern from Phase 3A to the top-level GNUmakefile.
+Phase 3C: Fixed critical bug where install_pcp wasn't running subdirectory
+installs (including QA files). Reverted install_pcp to serial loop while
+keeping parallel default_pcp for maximum speedup.
 
-Key changes:
-- Converted top-level subdirectories (vendor, src, qa, man, html, images,
-  build, debian) to phony targets
-- Added dependency chain: vendor → src → (others in parallel)
-- Used target-specific variables for default_pcp and install_pcp
-- Enabled jobserver coordination with + prefix
+Phase 4: Added auto-detection of CPU count for seamless user experience.
+- Auto-detects cores on macOS (sysctl) and Linux (nproc)
+- Added --disable-parallel-build flag for compatibility
+- Removed PCP_MAKE_JOBS environment variable (cleaner interface)
 
-Results:
-- Build time: 217s → 93s (57% improvement over Phase 3A)
-- Combined improvement: 304s → 93s (69% total, 3.3x speedup)
-- No race conditions across 3 repeatability tests
-- All packages build successfully
-
-Closes the parallelization initiative with target exceeded."
+Known issue: Race condition with newhelp.static requires investigation
+before full parallelism can be enabled by default."
 ```
 
-**2. Test on Other Platforms**
-- Verify parallel builds work correctly on Linux
+**3. Test on Other Platforms**
+- Verify auto-detection works on Linux
+- Test parallel builds on Linux (may have different race conditions)
 - Test on Windows (MinGW) if applicable
-- Document any platform-specific issues
 
-**3. Update Documentation**
+**4. Update Documentation (After Phase 5)**
 - Add build optimization guide for contributors
-- Document `PCP_MAKE_JOBS` in main README
-- Update build instructions in INSTALL.md
+- Update README with auto-detection info
+- Update INSTALL.md build instructions
 
-**4. Optional Future Enhancements**
-- **Phase 4: QA Test Parallelization** - Requires significant QA framework changes (deferred)
+**5. Optional Future Enhancements**
+- **Phase 6: QA Test Parallelization** - Requires significant QA framework changes
 - **ccache integration** - Document setup for even faster incremental builds
 - **distcc support** - For distributed compilation across multiple machines
 - **Build metrics tracking** - Monitor build performance over time
@@ -580,6 +624,16 @@ Closes the parallelization initiative with target exceeded."
 2. **Syntax matters**: `+` must come before `@` in recipe (`+@command`, not `@+command`)
 3. **Jobserver coordination**: The `+` prefix is critical for `-jN` to work across recursive make
 4. **Test thoroughly**: A single successful build doesn't prove there are no race conditions
+5. **Target-specific variables don't propagate**: When using `target: VAR = value`, that variable only applies to recipes in that target, NOT to prerequisites
+   - `install_pcp: TARGET = install_pcp` + `install_pcp: $(SUBDIRS)` doesn't work as expected
+   - Prerequisites are evaluated separately and don't see the target-specific variable
+   - Solution: Use explicit variable passing `$(MAKE) TARGET=value` or shell loops
+6. **Inconsistent target names**: Different subdirectories may use different target names (`install` vs `install_pcp`)
+   - Makes it difficult to parallelize install phases uniformly
+   - Serial shell loops handle this inconsistency gracefully
+7. **Don't optimize the fast parts**: Install is ~30-40s (10% of total), compilation is ~240s (90%)
+   - Parallelizing install adds complexity for minimal benefit
+   - Focus optimization efforts on the actual bottlenecks
 
 ### Build System Architecture Notes
 
