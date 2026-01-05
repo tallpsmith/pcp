@@ -24,6 +24,7 @@ cfgonly=false
 dorpm=unknown
 dodeb=unknown
 check=false
+parallel_build=true
 
 if [ ! -d .git ]
 then
@@ -224,6 +225,10 @@ do
 	;;
     --nodebug)
 	configure_opts="--with-non-debug=yes"
+	;;
+    --disable-parallel-build)
+	parallel_build=false
+	shift
 	;;
     *)
 	# Add remaining options to the ./configure command line
@@ -768,13 +773,34 @@ default_build()
     echo
     echo "== Building pcp, log is in $LOGDIR/pcp"
 
-    # Optional parallel build support via environment variable
-    # Set PCP_MAKE_JOBS to enable parallel builds (e.g., PCP_MAKE_JOBS=-j12)
-    # If not set, builds sequentially (current/legacy behavior)
-    if [ -n "$PCP_MAKE_JOBS" ]; then
-	echo "   (parallel builds enabled: $PCP_MAKE_JOBS)"
-	MAKE_FLAGS="$PCP_MAKE_JOBS"
+    # Parallel build support with auto-detection of CPU count
+    # Can be disabled with --disable-parallel-build flag
+    if $parallel_build; then
+	# Auto-detect CPU count based on platform
+	NCPUS=""
+	if [ "$target" = "darwin" ]; then
+	    # macOS: use sysctl to get logical CPU count
+	    NCPUS=`sysctl -n hw.logicalcpu 2>/dev/null`
+	elif [ "$target" = "linux" ]; then
+	    # Linux: use nproc if available, fallback to /proc/cpuinfo
+	    if command -v nproc >/dev/null 2>&1; then
+		NCPUS=`nproc 2>/dev/null`
+	    else
+		NCPUS=`grep -c ^processor /proc/cpuinfo 2>/dev/null`
+	    fi
+	fi
+
+	# Validate we got a number and it's reasonable (1-256)
+	if [ -n "$NCPUS" ] && [ "$NCPUS" -ge 1 ] 2>/dev/null && [ "$NCPUS" -le 256 ] 2>/dev/null; then
+	    echo "   (parallel builds enabled: -j$NCPUS, auto-detected)"
+	    MAKE_FLAGS="-j$NCPUS"
+	else
+	    # Fallback to serial build if detection fails
+	    echo "   (warning: CPU detection failed, building serially)"
+	    MAKE_FLAGS=""
+	fi
     else
+	echo "   (parallel builds disabled)"
 	MAKE_FLAGS=""
     fi
 
