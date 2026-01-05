@@ -125,14 +125,14 @@ $(OBJECTS):	./include/pcp/pmapi.h \
 		./include/pcp/platform_defs.h \
 		$(GENERATED_HFILES)
 
-.NOTPARALLEL:
+.NOTPARALLEL: getdate.h getdate.tab.c
 getdate.h getdate.tab.c: getdate.y
 	$(YACC) -d -b `basename $< .y` $< && cp `basename $@ .h`.tab.h $@
 
 getdate.y: getdate.y.in fix_getdate_y
 	./fix_getdate_y
 
-.NOTPARALLEL:
+.NOTPARALLEL: derive_parser.tab.h derive_parser.tab.c
 derive_parser.tab.h derive_parser.tab.c: derive_parser.y derive.h
 	$(YACC) -d -b `basename $< .y` $<
 

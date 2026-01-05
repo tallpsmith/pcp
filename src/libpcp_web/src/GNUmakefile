@@ -155,7 +155,7 @@ $(HIREDIS_CLUSTER_XFILES):
 	mkdir -p deps/hiredis-cluster/adapters
 	$(LN_S) -f $(realpath $(TOPDIR))/vendor/github.com/Nordix/$(@:deps/%=%) $@
 
-.NOTPARALLEL:
+.NOTPARALLEL: query_parser.tab.h query_parser.tab.c
 query_parser.tab.h query_parser.tab.c: query_parser.y query.h
 	$(YACC) -d -b `basename $< .y` $<
 

@@ -106,11 +106,11 @@ fault.o:	$(TOPDIR)/src/include/pcp/fault.h
 $(OBJECTS):	$(TOPDIR)/src/include/pcp/pmapi.h \
 		$(TOPDIR)/src/include/pcp/platform_defs.h
 
-.NOTPARALLEL:
+.NOTPARALLEL: getdate.h getdate.tab.c
 getdate.h getdate.tab.c: getdate.y
 	$(YACC) -d -b `basename $< .y` $< && cp `basename $@ .h`.tab.h $@
 
-.NOTPARALLEL:
+.NOTPARALLEL: derive_parser.tab.h derive_parser.tab.c
 derive_parser.tab.h derive_parser.tab.c: derive_parser.y derive.h
 	$(YACC) -d -b `basename $< .y` $<
 
