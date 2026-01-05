@@ -46,20 +46,37 @@ default :: default_pcp
 
 pcp : default_pcp
 
-default_pcp : $(CONFIGURE_GENERATED) tmpfiles.init.setup
-	+for d in `echo $(SUBDIRS)`; do \
-	    if test -d "$$d" ; then \
-		echo === $$d ===; \
-		$(MAKE) -C $$d $@ || exit $$?; \
-	    fi; \
-	done
+# Enable parallel subdirectory builds (Phase 3B)
+# Declare subdirectories as phony targets to enable make-level parallelism
+.PHONY: $(SUBDIRS)
+
+# Target-specific variable for subdirectory builds
+default_pcp: TARGET = default_pcp
+default_pcp: $(CONFIGURE_GENERATED) tmpfiles.init.setup $(SUBDIRS)
+
+# Pattern rule for building subdirectories
+# The + prefix allows make's jobserver to coordinate -jN across recursive calls
+$(SUBDIRS):
+	+@if [ -d "$@" ]; then \
+		echo === $@ ===; \
+		$(MAKE) -C $@ $(TARGET) || exit $$?; \
+	fi
+
+# Dependencies: vendor first, then src, then everything else in parallel
+src: vendor
+ifneq ($(TARGET_OS),mingw)
+qa: src
+endif
+man html images build debian: src
 
 install :: default_pcp install_pcp
 
 pack_pcp : default_pcp
 	$(MAKE) -C build $@
 
-install_pcp :  default_pcp
+# Target-specific variable for install
+install_pcp: TARGET = install_pcp
+install_pcp: default_pcp $(SUBDIRS)
 	# install the common directories _once_
 	$(INSTALL) -m 755 -d $(PCP_VAR_DIR)
 	$(INSTALL) -m 755 -d $(PCP_SHARE_DIR)
@@ -107,13 +124,6 @@ endif
 	$(INSTALL) -m 755 -d $(PCP_PMDAS_DIR)
 	$(INSTALL) -m 755 -d $(PCP_DOC_DIR)
 	$(INSTALL) -m 755 -d $(PCP_DEMOS_DIR)
-	#
-	@for d in `echo $(SUBDIRS)`; do \
-	    if test -d "$$d" ; then \
-		echo === $$d ===; \
-		$(MAKE) -C $$d $@ || exit $$?; \
-	    fi; \
-	done
 ifneq "$(PACKAGE_DISTRIBUTION)" "debian"
 	$(INSTALL) -m 644 $(LICFILES) $(PCP_DOC_DIR)/$(LICFILES)
 endif
