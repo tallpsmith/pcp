@@ -40,9 +40,9 @@ LIBS_SUBDIRS = \
 LIBS_SUBDIRS += libpcp3
 
 # ones that generate .static executables and may be used later on
-# in the build
+# in the build (Phase 5: split these out to fix newhelp.static race condition)
 #
-OTHER_SUBDIRS = \
+TOOLS_SUBDIRS = \
 	pmcpp \
 	newhelp \
 	pmieconf \
@@ -51,7 +51,7 @@ OTHER_SUBDIRS = \
 
 # and all the rest ...
 #
-OTHER_SUBDIRS += \
+OTHER_SUBDIRS = \
 	pminfo \
 	pmprobe \
 	bashrc \
@@ -153,6 +153,7 @@ SUBDIRS = \
 	$(LIBPCP_SUBDIR) \
 	$(PMNS_SUBDIR) \
 	$(LIBS_SUBDIRS) \
+	$(TOOLS_SUBDIRS) \
 	$(OTHER_SUBDIRS)
 
 default :: default_pcp
@@ -185,9 +186,12 @@ $(SUBDIRS):
 # Stage 2: libpcp, then libpcp_static (they share source, cannot run in parallel)
 # Stage 3: pmns
 # Stage 4: all LIBS_SUBDIRS (13 libraries can build in parallel)
-# Stage 5: all OTHER_SUBDIRS (~100 tools can build in parallel)
+# Stage 5: TOOLS_SUBDIRS and most OTHER_SUBDIRS build in parallel
+# Stage 6: pmdas waits for TOOLS_SUBDIRS (needs newhelp.static)
 $(LIBPCP_SUBDIR): $(INCLUDE_SUBDIR)
 libpcp_static: libpcp  # libpcp_static uses symlinks to libpcp source, must build after
 $(PMNS_SUBDIR): $(LIBPCP_SUBDIR)
 $(LIBS_SUBDIRS): $(PMNS_SUBDIR)
+$(TOOLS_SUBDIRS): $(LIBS_SUBDIRS)
 $(OTHER_SUBDIRS): $(LIBS_SUBDIRS)
+pmdas: $(TOOLS_SUBDIRS)  # Phase 5: pmdas specifically needs newhelp.static from TOOLS_SUBDIRS
