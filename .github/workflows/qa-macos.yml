@@ -17,11 +17,6 @@ jobs:
       - name: Update Homebrew
         run: brew update
 
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
       - name: Install macOS dependencies
         run: bash build/mac/scripts/install-deps.sh  # Install all deps (no --minimal)
 
@@ -37,10 +32,12 @@ jobs:
           # This matches the configuration used in Makepkgs for darwin
           ETC=$(realpath /etc)
           VAR=$(realpath /var)
-          # Discover Homebrew Python prefix to install bindings to the right location
+          # NOTE: We use Homebrew Python/Perl, not GitHub's setup-python.
+          # This mirrors how users actually build PCP from source on macOS, and our build
+          # system installs modules where Homebrew interpreters look (PYTHON_PREFIX/lib/pythonX.Y/site-packages).
           PYTHON_PREFIX=$(python3 -c 'import sys; print(sys.prefix)')
           echo "Python prefix: $PYTHON_PREFIX"
-          ./configure --sysconfdir=$ETC --localstatedir=$VAR --prefix=/usr/local --with-python-prefix=$PYTHON_PREFIX --with-qt=no
+          ./configure --sysconfdir=$ETC --localstatedir=$VAR --prefix=/usr/local --with-python_prefix=$PYTHON_PREFIX --with-qt=no
 
       - name: Build PCP
         run: |
@@ -91,34 +88,14 @@ jobs:
       - name: Install PCP
         run: sudo make install
 
-      - name: Verify Python/Perl bindings installation
+      - name: Verify Python/Perl module paths
         run: |
-          echo "=== Phase 2 Verification: Python/Perl Bindings ==="
-          echo "Python search paths:"
-          python3 -c "import sys; print('\n'.join(sys.path))"
+          echo "=== Verifying Python/Perl module installation ==="
+          echo "Python prefix: $(python3 -c 'import sys; print(sys.prefix)')"
+          echo "Python site-packages: $(python3 -c 'import site; print(site.getsitepackages())')"
           echo ""
-          echo "Perl @INC paths:"
-          perl -e 'print join("\n", @INC), "\n"'
-          echo ""
-          echo "Testing Python pcp.pmapi import..."
-          python3 -c "from pcp import pmapi; print('✓ Python pcp.pmapi OK')" || {
-            echo "✗ Python pcp.pmapi FAILED - checking installation location"
-            find /usr/local/lib -name "pmapi.py" 2>/dev/null || echo "pmapi.py not found in /usr/local/lib"
-            PYTHON_PREFIX=$(python3 -c 'import sys; print(sys.prefix)')
-            find "$PYTHON_PREFIX/lib" -name "pmapi.py" 2>/dev/null || echo "pmapi.py not found in $PYTHON_PREFIX/lib either"
-            # Set PYTHONPATH as fallback
-            PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-            export PYTHONPATH="/usr/local/lib/python${PY_VER}/site-packages:${PYTHONPATH:-}"
-            echo "Setting PYTHONPATH=$PYTHONPATH as fallback"
-            echo "PYTHONPATH=$PYTHONPATH" >> $GITHUB_ENV
-          }
-          echo ""
-          echo "Testing Perl PCP::PMDA module..."
-          perl -e "use PCP::PMDA; print '✓ Perl PCP::PMDA OK\n'" || {
-            echo "✗ Perl PCP::PMDA FAILED - setting PERL5LIB"
-            export PERL5LIB="/usr/local/lib/perl5/site_perl:/usr/local/lib/perl5/vendor_perl:${PERL5LIB:-}"
-            echo "PERL5LIB=$PERL5LIB" >> $GITHUB_ENV
-          }
+          python3 -c "from pcp import pmapi; print('✓ Python pcp.pmapi OK')" || echo "✗ Python pcp.pmapi not yet installed"
+          perl -e "use PCP::PMDA; print '✓ Perl PCP::PMDA OK\n'" || echo "✗ Perl PCP::PMDA not yet installed"
 
       - name: Rebuild PMNS
         run: |
@@ -580,7 +557,7 @@ jobs:
           # Capture its output explicitly
           if [ ! -f localconfig ]; then
             echo "=== localconfig missing, running make setup explicitly ==="
-            sudo -u pcpqa make setup 2>&1 | tee /tmp/make-setup.log || {
+            sudo -u pcpqa env TERM=xterm-256color make setup 2>&1 | tee /tmp/make-setup.log || {
               echo ""
               echo "=== MAKE SETUP FAILED ==="
               echo "Full output saved to /tmp/make-setup.log"
@@ -588,7 +565,10 @@ jobs:
             }
           fi
 
-          sudo -u pcpqa ./check -g sanity -x not_in_ci
+          # Modules are installed to system-searchable paths - no PYTHONPATH/PERL5LIB needed
+          sudo -u pcpqa env \
+            TERM=xterm-256color \
+            ./check -g sanity -x not_in_ci
 
       - name: Upload QA logs
         if: always()

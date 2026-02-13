@@ -12,11 +12,9 @@ jobs:
         run: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
       - name: Update Homebrew
         run: brew update
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
+      # NOTE: We intentionally use Homebrew Python/Perl rather than GitHub's setup-python action.
+      # This ensures CI tests mirror how users actually build PCP from source on macOS.
+      # Our build system installs modules where Homebrew interpreters expect them.
       - name: Install macOS dependencies
         id: install-deps
         uses: ./.github/actions/install-macos-deps

@@ -3440,6 +3440,14 @@ python_prefix=`eval echo $python_prefix`
 python_prefix=`eval echo $python_prefix`
 AC_SUBST(python_prefix)
 
+dnl compute python version (major.minor) for use in install path
+if test -n "$PYTHON3"; then
+    python_version=`$PYTHON3 -c 'import sys; print(str(sys.version_info.major) + "." + str(sys.version_info.minor))'`
+else
+    python_version=""
+fi
+AC_SUBST(python_version)
+
 AC_PATH_XTRA
 pcp_x11_incflags=$X_CFLAGS
 AC_SUBST(pcp_x11_incflags)
