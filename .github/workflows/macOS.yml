@@ -379,6 +379,14 @@ jobs:
         run: |
           # Unmount any mounted PCP volumes
           hdiutil detach /Volumes/pcp* 2>/dev/null || true
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOS-logs
+          path: |
+            /var/log/install.log
+          retention-days: 7
       # New steps for handling releases on version tags below
       - name: Check if version tag
         if: github.ref_type == 'tag'
@@ -387,7 +395,7 @@ jobs:
         with:
           text: ${{ github.ref_name }}
           regex: '^[0-9]+\.[0-9]+\.[0-9]+$'
-          flags: g  # Global flag, but optional if just checking match
+          flags: g # Global flag, but optional if just checking match
       - name: Generate Github Summary - version tag detected
         if: steps.check_tag.outputs.match != ''
         run: |
@@ -401,4 +409,4 @@ jobs:
         if: steps.check_tag.outputs.match != ''
         with:
           files: |
-              pcp-**/build/mac/pcp-*.dmg
+            pcp-**/build/mac/pcp-*.dmg
