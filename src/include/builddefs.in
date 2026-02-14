@@ -600,10 +600,10 @@ PERL_INSTALL_BASE = @perl_install_base@
 PERL_INSTALLDIRS = @perl_installdirs@
 
 # macOS: INSTALL_BASE creates paths not in system @INC (/usr/local/lib/perl5 is not searched).
-# Use INSTALLDIRS=site instead, which installs to /Library/Perl/5.xx/ - always in @INC.
+# On Darwin, configure.ac sets perl_installdirs=site which installs to /Library/Perl/5.xx/
 # Other platforms: unset INSTALL_BASE when prefix=/usr so vendor_perl paths are used.
 ifeq "$(TARGET_OS)" "darwin"
-MAKEMAKER_EXTRA_OPTIONS=INSTALLDIRS=site
+MAKEMAKER_EXTRA_OPTIONS=
 else
 ifeq "$(PERL_INSTALL_BASE)" "/usr"
 MAKEMAKER_EXTRA_OPTIONS=

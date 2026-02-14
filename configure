@@ -1805,7 +1805,7 @@ Optional Packages:
   --with-transparent-decompression
                           enable support for transparent decompression of
                           archives (default is on)
-  --with-perl_installdirs perl installdirs [vendor]
+  --with-perl_installdirs perl installdirs [vendor/site]
   --with-perl_install_base
                           perl install_base [PREFIX]
   --with-python_prefix    python setup.py prefix [PREFIX]
@@ -16649,7 +16649,14 @@ if test ${with_perl_installdirs+y}
 then :
   withval=$with_perl_installdirs; perl_installdirs=$withval
 else case e in #(
-  e) perl_installdirs=vendor ;;
+  e) case "$target_os" in
+                          darwin*)
+                              perl_installdirs=site
+                              ;;
+                          *)
+                              perl_installdirs=vendor
+                              ;;
+                      esac ;;
 esac
 fi
 

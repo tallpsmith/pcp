@@ -3420,9 +3420,16 @@ AC_SUBST(pcp_lib_dir)
 AC_SUBST(pcp_lib32_dir)
 
 dnl perl modules
-AC_ARG_WITH(perl_installdirs,[AS_HELP_STRING([--with-perl_installdirs],[perl installdirs [vendor]])],
+AC_ARG_WITH(perl_installdirs,[AS_HELP_STRING([--with-perl_installdirs],[perl installdirs [vendor/site]])],
                       [perl_installdirs=$withval],
-                      [perl_installdirs=vendor])
+                      [case "$target_os" in
+                          darwin*)
+                              perl_installdirs=site
+                              ;;
+                          *)
+                              perl_installdirs=vendor
+                              ;;
+                      esac])
 perl_installdirs=`eval echo $perl_installdirs`
 perl_installdirs=`eval echo $perl_installdirs`
 AC_SUBST(perl_installdirs)
