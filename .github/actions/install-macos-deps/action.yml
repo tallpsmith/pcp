@@ -45,13 +45,13 @@ runs:
       run: |
         echo "Installing Python packages for PCP..."
         python3 --version
-        pip3 --version
-        pip3 install --upgrade pip
 
-        # Create venv for build dependencies
+        # Homebrew Python 3.12+ blocks pip install outside a venv (PEP 668).
+        # Create the venv first, then do everything inside it.
         python3 -m venv pybuilddeps
         source pybuilddeps/bin/activate
 
+        pip3 install --upgrade pip
         pip3 install setuptools wheel
         python3 -c "import setuptools; print('setuptools version:', setuptools.__version__)"
 
@@ -59,7 +59,6 @@ runs:
         python3 -m pip install \
           lxml \
           openpyxl \
-          OrderedDict \
           psycopg2-binary \
           prometheus_client \
           pyarrow \
