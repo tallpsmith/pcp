@@ -18,7 +18,7 @@ jobs:
         run: brew update
 
       - name: Install macOS dependencies
-        run: bash build/mac/scripts/install-deps.sh  # Install all deps (no --minimal)
+        run: bash build/mac/scripts/install-deps.sh # Install all deps (no --minimal)
 
       - name: Enable TCP stats
         run: |
@@ -547,8 +547,8 @@ jobs:
 
       - name: Run QA sanity tests
         env:
-          MAKEFLAGS: ""  # Force serial make - no parallelism
-          TERM: xterm-256color  # Fix terminal errors in test output
+          MAKEFLAGS: "" # Force serial make - no parallelism
+          TERM: xterm-256color # Fix terminal errors in test output
         run: |
           cd /var/lib/pcp/testsuite
           export TERM=xterm-256color  # Ensure TERM is set for subprocesses
@@ -580,5 +580,7 @@ jobs:
             /var/lib/pcp/testsuite/*.full
             /var/lib/pcp/testsuite/check.log
             /var/log/pcp/
+            /var/log/install.log
+            /var/log/pcp_inst.log
             /tmp/make-setup.log
           retention-days: 7
