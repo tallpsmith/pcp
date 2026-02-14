@@ -379,13 +379,14 @@ jobs:
         run: |
           # Unmount any mounted PCP volumes
           hdiutil detach /Volumes/pcp* 2>/dev/null || true
-      - name: Upload logs
-        if: always()
+      - name: Upload logs on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: macOS-logs
           path: |
             /var/log/install.log
+            /var/log/pcp_inst.log
           retention-days: 7
       # New steps for handling releases on version tags below
       - name: Check if version tag
