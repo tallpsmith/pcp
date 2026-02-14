@@ -33,10 +33,13 @@ jobs:
           ETC=$(realpath /etc)
           VAR=$(realpath /var)
           # NOTE: We use Homebrew Python/Perl, not GitHub's setup-python.
-          # This mirrors how users actually build PCP from source on macOS, and our build
-          # system installs modules where Homebrew interpreters look (PYTHON_PREFIX/lib/pythonX.Y/site-packages).
-          PYTHON_PREFIX=$(python3 -c 'import sys; print(sys.prefix)')
+          # sys.prefix points to the Framework path on macOS, but Homebrew's site-packages
+          # lives at /opt/homebrew/lib/pythonX.Y/site-packages - a completely different tree.
+          # Derive the correct prefix from sysconfig.get_path('purelib') by stripping the
+          # /lib/pythonX.Y/site-packages suffix so PCP installs where Python actually looks.
+          PYTHON_PREFIX=$(python3 -c 'import sysconfig, re; p=sysconfig.get_path("purelib"); print(re.sub(r"/lib/python[0-9.]+/site-packages.*$", "", p))')
           echo "Python prefix: $PYTHON_PREFIX"
+          echo "Python site-packages: $(python3 -c 'import sysconfig; print(sysconfig.get_path(\"purelib\"))')"
           ./configure --sysconfdir=$ETC --localstatedir=$VAR --prefix=/usr/local --with-python_prefix=$PYTHON_PREFIX --with-qt=no
 
       - name: Build PCP
