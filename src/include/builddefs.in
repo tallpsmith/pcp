@@ -681,6 +681,28 @@ endif
 endif
 endif
 
+ifeq "$(TARGET_OS)" "darwin"
+# On macOS, INSTALLDIRS=site installs to Homebrew Perl's site dirs which are
+# NOT under $(PERL_INSTALL_BASE). Override to search the entire DIST_ROOT.
+PERL_GET_FILELIST = \
+	$(PERLMAKE) -f Makefile $(1) DESTDIR="$$DIST_ROOT"; \
+	find "$$DIST_ROOT" -name .packlist -exec mv '{}' $(2) ';' ; \
+	if [ -s $(2) ] ; then \
+	    $(MANPAGE_SUFFIX) \
+            if [ "$(HAVE_MANPAGES)" = "false" ] ; then \
+		sed -e '/.*man[1-9].*/d' -e '/.*3pm.*/d' $(2) >$(2).tmp; \
+		mv $(2).tmp $(2); \
+		find "$$DIST_ROOT" -name "*3pm*" -exec rm -rf '{}' ';' ; \
+	    fi ;\
+	    sed -n -e '/\.bs$$/d' -e 's/\.[0-9]pm$$/&'"$$_sfx/" -e "s@^$$DIST_ROOT@@p" $(2) >$(2).tmp; \
+	    mv $(2).tmp $(2); \
+	else echo "Arrgh ... no files to include in package via $(2)"; exit 1; \
+	fi; \
+	find "$$DIST_ROOT" -name perllocal.pod -exec rm -f '{}' ';' ; \
+	find "$$DIST_ROOT" -name \*.bs  -exec rm -f '{}' ';' ; \
+	find "$$DIST_ROOT" -name $(3).so -exec chmod 755 '{}' ';'
+endif
+
 # Create perl manifest files explicitly for some distributions
 ifeq "$(shell [ '$(PACKAGE_DISTRIBUTION)' = macos \
                 -o '$(PACKAGE_DISTRIBUTION)' = gentoo \
