@@ -387,6 +387,8 @@ jobs:
           path: |
             /var/log/install.log
             /var/log/pcp_inst.log
+            ./pcp-*/build/mac/idb
+            ./perl-pcp-*.list
           retention-days: 7
       # New steps for handling releases on version tags below
       - name: Check if version tag
