@@ -684,8 +684,11 @@ endif
 ifeq "$(TARGET_OS)" "darwin"
 # On macOS, INSTALLDIRS=site installs to Homebrew Perl's site dirs which are
 # NOT under $(PERL_INSTALL_BASE). Override to search the entire DIST_ROOT.
+# When DIST_ROOT is empty (direct make install, not packaging), skip the
+# packlist collection - modules are already installed to the system directly.
 PERL_GET_FILELIST = \
 	$(PERLMAKE) -f Makefile $(1) DESTDIR="$$DIST_ROOT"; \
+	if [ -n "$$DIST_ROOT" ] ; then \
 	find "$$DIST_ROOT" -name .packlist -exec mv '{}' $(2) ';' ; \
 	if [ -s $(2) ] ; then \
 	    $(MANPAGE_SUFFIX) \
@@ -700,7 +703,8 @@ PERL_GET_FILELIST = \
 	fi; \
 	find "$$DIST_ROOT" -name perllocal.pod -exec rm -f '{}' ';' ; \
 	find "$$DIST_ROOT" -name \*.bs  -exec rm -f '{}' ';' ; \
-	find "$$DIST_ROOT" -name $(3).so -exec chmod 755 '{}' ';'
+	find "$$DIST_ROOT" -name $(3).so -exec chmod 755 '{}' ';' ; \
+	fi
 endif
 
 # Create perl manifest files explicitly for some distributions
