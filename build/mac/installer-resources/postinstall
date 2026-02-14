@@ -1,12 +1,12 @@
 #!/bin/sh
 #
 # Copyright (c) 2003-2004 Silicon Graphics, Inc.  All Rights Reserved.
-# 
+#
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by the
 # Free Software Foundation; either version 2 of the License, or (at your
 # option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful, but
 # WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
@@ -31,7 +31,7 @@ then
     exit
 fi
 
-if ./install-pcp -i -l /var/log/pcp_inst.log idb
+if ./install-pcp -v -i -l /var/log/pcp_inst.log idb
 then
     :
 else
@@ -60,14 +60,14 @@ fi
 userid=432
 groupid=432
 
-if ! dscl . -list /Groups | grep -q '^pcp$' 
+if ! dscl . -list /Groups | grep -q '^pcp$'
 then
     dscl . -create /Groups/pcp
     dscl . -create /Groups/pcp PrimaryGroupID $groupid
     dscl . -create /Groups/pcp Password \*
 fi
 
-if ! dscl . -list /Users | grep -q '^pcp$' 
+if ! dscl . -list /Users | grep -q '^pcp$'
 then
     dscl . -create /Users/pcp
     dscl . -create /Users/pcp UniqueID $userid
