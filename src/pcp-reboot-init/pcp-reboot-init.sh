@@ -92,9 +92,9 @@ then
     fi
 fi
 
-if [ "$mode" != "rwxrwxr-x" ]
+if [ "$mode" != "rwxrwxrwx" ]
 then
-    if chmod 775 "$PCP_RUN_DIR"
+    if chmod 1777 "$PCP_RUN_DIR"
     then
 	:
     else
