@@ -372,14 +372,18 @@ jobs:
         run: |
           echo "=== Fixing PCP runtime directory permissions for pcpqa ==="
           . /etc/pcp.conf
-          sudo chown -R pcpqa:staff $PCP_RUN_DIR
-          sudo chmod -R 755 $PCP_RUN_DIR
+          # Both pcp daemon and pcpqa test user need write access.
+          # Use sticky + world-writable so both users can coexist.
+          sudo mkdir -p $PCP_RUN_DIR
+          sudo chown pcp:pcp $PCP_RUN_DIR
+          sudo chmod 1777 $PCP_RUN_DIR
           echo "✓ Permissions fixed"
           ls -ld $PCP_RUN_DIR
-          # Ensure user home directory exists for .pcp/run
-          sudo mkdir -p /Users/runner/.pcp/run
-          sudo chown -R runner:staff /Users/runner/.pcp
-          echo "✓ User .pcp directory configured"
+          # Set up fallback socket dir for pcpqa's actual home (not runner's home)
+          sudo mkdir -p /Users/pcpqa/.pcp/run
+          sudo chown -R pcpqa:staff /Users/pcpqa/.pcp
+          sudo chmod 755 /Users/pcpqa/.pcp/run
+          echo "✓ pcpqa home .pcp directory configured"
 
       - name: Verify environment configuration
         run: |
@@ -394,7 +398,7 @@ jobs:
           ls -l $PCP_RUN_DIR | head -10 || echo "Directory empty"
           echo ""
           echo "pcpqa user home directory:"
-          ls -ld /Users/runner/.pcp 2>/dev/null || echo "/Users/runner/.pcp does not exist"
+          ls -ld /Users/pcpqa/.pcp 2>/dev/null || echo "/Users/pcpqa/.pcp does not exist"
 
       - name: Debug testsuite state before QA
         run: |
@@ -560,7 +564,7 @@ jobs:
           # Capture its output explicitly
           if [ ! -f localconfig ]; then
             echo "=== localconfig missing, running make setup explicitly ==="
-            sudo -u pcpqa env TERM=xterm-256color make setup 2>&1 | tee /tmp/make-setup.log || {
+            sudo -u pcpqa env TERM=xterm-256color HOME=/Users/pcpqa make setup 2>&1 | tee /tmp/make-setup.log || {
               echo ""
               echo "=== MAKE SETUP FAILED ==="
               echo "Full output saved to /tmp/make-setup.log"
@@ -569,8 +573,11 @@ jobs:
           fi
 
           # Modules are installed to system-searchable paths - no PYTHONPATH/PERL5LIB needed
+          # HOME must point to pcpqa's actual home so fallback socket dir resolves correctly
           sudo -u pcpqa env \
             TERM=xterm-256color \
+            HOME=/Users/pcpqa \
+            PCP_DIR="" \
             ./check -g sanity -x not_in_ci
 
       - name: Upload QA logs

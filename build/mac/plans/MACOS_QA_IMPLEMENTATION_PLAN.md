@@ -1243,3 +1243,58 @@ populate_script: |
   - Filtering/normalization in test scripts
   - Marking as `not_in_ci` if inherently non-portable
 
+---
+
+## Pass 1 Fixes (2026-02-16)
+
+**Target**: Reduce failures from 20 → ≤9 by fixing three root cause clusters.
+
+### Completed Fixes
+
+| Fix | Tests | Files Changed |
+|-----|-------|---------------|
+| `basename` in `LINKER_MAKERULE` to prevent rpath tripling | 068 | `src/include/builddefs.install` |
+| Darwin rpath in Perl PMDA bundle lddlflags | 416 | `src/perl/PMDA/Makefile.PL` |
+| Darwin rpath in Perl LogImport bundle lddlflags | 369, 1418 | `src/perl/LogImport/Makefile.PL` |
+| `PCP_RUN_DIR` sticky world-writable (1777) + pcpqa homedir | 107, 178, 234, 338, 354 | `.github/workflows/qa-macos.yml` |
+| Pass `HOME=/Users/pcpqa` to test invocation | 107, 178, 234, 338, 354 | `.github/workflows/qa-macos.yml` |
+
+### Root Cause Analysis
+
+**rpath tripling (test 068)**: `otool -L` returns absolute paths (e.g. `/usr/local/lib/libpcp.4.dylib`).
+`LINKER_MAKERULE` was prepending `$(PCP_LIB_DIR)/` without stripping the directory, producing
+`/usr/local/lib//usr/local/lib/libpcp.4.dylib`. On repeated `make install` runs the path tripled.
+Fix: `basename $$lib` extracts only the filename before prepending the lib dir.
+
+**Perl bundle rpath (tests 416, 369, 1418)**: Perl `.bundle` files are loaded via `dlopen()`.
+SIP strips `DYLD_LIBRARY_PATH` from the environment before Perl extension loading, so
+`libpcp_pmda.dylib` / `libpcp_import.dylib` couldn't be found at runtime. Fix: embed rpath
+via `-Wl,-rpath,$(pcp-config --libdir)` at link time so the dynamic linker knows where to look.
+
+**pmlogger socket failures (tests 107, 178, 234, 338, 354)**: Three-pronged problem:
+1. `PCP_RUN_DIR` was `chown pcpqa:staff chmod 755` — `pcp` daemon user couldn't write there after restart
+2. Tests ran as `sudo -u pcpqa` inheriting `HOME=/Users/runner` — fallback socket resolved to runner's homedir
+3. Runner's `~/.pcp/run` was owned by `runner`, not writable by `pcpqa`
+Fix: `PCP_RUN_DIR` gets `pcp:pcp 1777` (sticky world-writable); tests pass explicit `HOME=/Users/pcpqa`;
+pcpqa's `~/.pcp/run` is created and owned by pcpqa.
+
+---
+
+## Pass 2 Deferred Items
+
+These tests require deeper investigation and are tracked for a future pass.
+
+| Test | Symptom | Approach |
+|------|---------|----------|
+| 031 | PMNS listing misses `swap.*` and `vfs.*` metrics | Add metrics to `qa/031.out.darwin` |
+| 112 | Similar PMNS listing differences | Add to `qa/112.out.darwin` |
+| 256 | `proc.io` derived metric errors on macOS (no `/proc`) | Filter proc.io errors in test or create `.out.darwin` |
+| 1204 | pmlogger log contains Linux-only metric warnings | Create `qa/1204.out.darwin` filtering Linux-only metric refs |
+| 055 | pmie timing/ordering non-determinism | Investigate pmie rule evaluation order on macOS |
+| 085 | pmlogger config warning messages missing from output | Investigate pmlogger config parsing on macOS |
+| 155 | sample PMDA not-ready state not activating correctly | Investigate PMDA startup state machine on macOS |
+| 201 | pmdaCache output truncating after line 115 | Investigate cache file path differences |
+| 437 | bzip2 error message text differs from filter patterns | Update filter in test or create `.out.darwin` |
+| 702 | Python bindings output differences | Investigate — possibly `long()` vs `int` in Python 3 |
+| 707 | Python bindings output differences | Same as 702 |
+

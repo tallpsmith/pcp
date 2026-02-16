@@ -18,7 +18,9 @@ else {
     $libs = ["-L$ENV{PCP_TOPDIR}/src/libpcp_pmda/src -L$ENV{PCP_TOPDIR}/src/libpcp/src -lpcp_pmda -lpcp"];
 }
 if ($ENV{TARGET_OS} eq "darwin") {
-    $lddlflags = "-bundle -undefined dynamic_lookup";
+    my $pcp_lib_dir = `pcp-config --libdir 2>/dev/null`; chomp($pcp_lib_dir);
+    $pcp_lib_dir ||= "/usr/local/lib";
+    $lddlflags = "-bundle -undefined dynamic_lookup -Wl,-rpath,$pcp_lib_dir";
 }
 else {
     $lddlflags = "-shared \$(OPTIMIZE) \$(LDFLAGS)";
