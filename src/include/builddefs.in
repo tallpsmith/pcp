@@ -443,7 +443,8 @@ ifeq "$(TARGET_OS)" "darwin"
 
 LINKER_MAKERULE = \
     for lib in `otool -L $@ | ${AWK} '/libpcp/ {print $$1}'`; do \
-        install_name_tool -change $$lib $(PCP_LIB_DIR)/$$lib $@; \
+        libname=`basename "$$lib"`; \
+        install_name_tool -change "$$lib" "$(PCP_LIB_DIR)/$$libname" $@; \
     done
 else
 LINKER_MAKERULE =
