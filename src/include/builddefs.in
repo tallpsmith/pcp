@@ -446,8 +446,26 @@ LINKER_MAKERULE = \
         libname=`basename "$$lib"`; \
         install_name_tool -change "$$lib" "$(PCP_LIB_DIR)/$$libname" $@; \
     done
+
+# Fix rpath in installed Perl .bundle files after PERL_GET_FILELIST installs them.
+# $(1) = path to the perl-pcp-*.list file listing installed files.
+# The list has paths relative to DIST_ROOT (or absolute if DIST_ROOT is empty).
+PERL_BUNDLE_LINKER = \
+    if [ -f $(1) ]; then \
+        grep '\.bundle$$' $(1) | while read f; do \
+            bundle="$${DIST_ROOT}$$f"; \
+            [ -f "$$bundle" ] || continue; \
+            for lib in `otool -L "$$bundle" | ${AWK} '/libpcp/ {print $$1}'`; do \
+                libname=`basename "$$lib"`; \
+                install_name_tool -change "$$lib" "$(PCP_LIB_DIR)/$$libname" "$$bundle"; \
+            done; \
+            otool -l "$$bundle" | grep -q "path $(PCP_LIB_DIR)" || \
+                install_name_tool -add_rpath "$(PCP_LIB_DIR)" "$$bundle"; \
+        done; \
+    fi
 else
 LINKER_MAKERULE =
+PERL_BUNDLE_LINKER =
 endif
 
 # prepare domain.h used during the PMDA build process for each PMDA

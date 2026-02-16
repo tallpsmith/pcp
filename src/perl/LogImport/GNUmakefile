@@ -63,6 +63,7 @@ ifeq "$(PACKAGE_DISTRIBUTION)" "openbsd"
 else
 	$(call PERL_GET_FILELIST,install,$(TOPDIR)/perl-pcp-logimport.list,LogImport)
 endif
+	$(call PERL_BUNDLE_LINKER,$(TOPDIR)/perl-pcp-logimport.list)
 endif
 
 install_perl:

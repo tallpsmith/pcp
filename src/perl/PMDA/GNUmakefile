@@ -65,6 +65,7 @@ ifeq "$(PACKAGE_DISTRIBUTION)" "openbsd"
 else
 	$(call PERL_GET_FILELIST,install,$(TOPDIR)/perl-pcp-pmda.list,PMDA)
 endif
+	$(call PERL_BUNDLE_LINKER,$(TOPDIR)/perl-pcp-pmda.list)
 endif
 
 install_perl:
