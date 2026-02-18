@@ -702,9 +702,9 @@ endif
 
 ifeq "$(TARGET_OS)" "darwin"
 # On macOS, INSTALLDIRS=site installs to Homebrew Perl's site dirs which are
-# NOT under $(PERL_INSTALL_BASE). Override to search the entire DIST_ROOT.
-# When DIST_ROOT is empty (direct make install, not packaging), skip the
-# packlist collection - modules are already installed to the system directly.
+# NOT under $(PERL_INSTALL_BASE). For packaging (DIST_ROOT set), search the
+# entire DIST_ROOT for the .packlist. For direct install (DIST_ROOT empty),
+# locate the bundle via perl -MConfig so PERL_BUNDLE_LINKER can fix it.
 PERL_GET_FILELIST = \
 	$(PERLMAKE) -f Makefile $(1) DESTDIR="$$DIST_ROOT"; \
 	if [ -n "$$DIST_ROOT" ] ; then \
@@ -723,6 +723,9 @@ PERL_GET_FILELIST = \
 	find "$$DIST_ROOT" -name perllocal.pod -exec rm -f '{}' ';' ; \
 	find "$$DIST_ROOT" -name \*.bs  -exec rm -f '{}' ';' ; \
 	find "$$DIST_ROOT" -name $(3).so -exec chmod 755 '{}' ';' ; \
+	else \
+	perl_arch=$$(perl -MConfig -e 'print $$Config{sitearchexp}'); \
+	find "$$perl_arch" -name "$(3).bundle" 2>/dev/null > $(2) || true; \
 	fi
 endif
 

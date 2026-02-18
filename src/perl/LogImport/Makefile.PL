@@ -17,7 +17,7 @@ else {
     $inc = "-I$ENV{PCP_TOPDIR}/src/include/pcp -I/usr/include/pcp";
     $libs = ["-L$ENV{PCP_TOPDIR}/src/libpcp/src -L$ENV{PCP_TOPDIR}/src/libpcp_import/src -lpcp_import -lpcp"];
 }
-if ($ENV{TARGET_OS} eq "darwin") {
+if ($^O eq 'darwin') {
     my $pcp_lib_dir = `pcp-config --libdir 2>/dev/null`; chomp($pcp_lib_dir);
     $pcp_lib_dir ||= "/usr/local/lib";
     $lddlflags = "-bundle -undefined dynamic_lookup -Wl,-rpath,$pcp_lib_dir";

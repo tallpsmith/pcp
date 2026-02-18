@@ -81,6 +81,8 @@ jobs:
             sudo mkdir -p /Users/pcpqa
             sudo chown pcpqa:staff /Users/pcpqa
           fi
+          echo "Adding pcpqa to pcp group for socket directory access..."
+          sudo dseditgroup -o edit -a pcpqa -t user pcp
 
       - name: Configure sudo for pcpqa
         run: |
@@ -99,6 +101,16 @@ jobs:
           echo ""
           python3 -c "from pcp import pmapi; print('✓ Python pcp.pmapi OK')" || echo "✗ Python pcp.pmapi not yet installed"
           perl -e "use PCP::PMDA; print '✓ Perl PCP::PMDA OK\n'" || echo "✗ Perl PCP::PMDA not yet installed"
+          echo ""
+          echo "=== Verifying Perl bundle rpath ==="
+          perl_arch=$(perl -MConfig -e 'print $Config{sitearchexp}')
+          echo "Perl site arch: $perl_arch"
+          for bundle in "$perl_arch"/auto/PCP/{PMDA/PMDA,LogImport/LogImport}.bundle; do
+            [ -f "$bundle" ] || { echo "  (not found: $bundle)"; continue; }
+            echo "Bundle: $bundle"
+            otool -L "$bundle" | grep libpcp || echo "  (no libpcp references)"
+            otool -l "$bundle" | grep -A1 LC_RPATH || echo "  (no LC_RPATH)"
+          done
 
       - name: Rebuild PMNS
         run: |
@@ -376,7 +388,7 @@ jobs:
           # Use sticky + world-writable so both users can coexist.
           sudo mkdir -p $PCP_RUN_DIR
           sudo chown pcp:pcp $PCP_RUN_DIR
-          sudo chmod 1777 $PCP_RUN_DIR
+          sudo chmod 775 $PCP_RUN_DIR
           echo "✓ Permissions fixed"
           ls -ld $PCP_RUN_DIR
           # Set up fallback socket dir for pcpqa's actual home (not runner's home)
