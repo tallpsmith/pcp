@@ -55,3 +55,4 @@ tmpfiles.init.setup
 
 .env
 .mcp.json
+CLAUDE.local.md
