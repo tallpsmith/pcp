@@ -271,7 +271,8 @@ darwin-fixup: $(TARGETS)
 	@for bin in $(TARGETS); do \
 	    if [ -f "$$bin" ] && file "$$bin" 2>/dev/null | grep -q "Mach-O"; then \
 	        for lib in $$(otool -L "$$bin" 2>/dev/null | awk '/libpcp/ {print $$1}'); do \
-	            install_name_tool -change "$$lib" "$(PCP_LIB_DIR)/$$lib" "$$bin" 2>/dev/null || true; \
+	            libname=`basename "$$lib"`; \
+	            install_name_tool -change "$$lib" "$(PCP_LIB_DIR)/$$libname" "$$bin" 2>/dev/null || true; \
 	        done; \
 	    fi; \
 	done

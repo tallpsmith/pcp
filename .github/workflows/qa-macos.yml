@@ -592,6 +592,36 @@ jobs:
             PCP_DIR="" \
             ./check -g sanity -x not_in_ci
 
+      - name: Post-QA failure diagnostics
+        if: failure()
+        run: |
+          . /etc/pcp.conf
+          echo "=== POST-QA SYSTEM STATE DIAGNOSTICS ==="
+
+          # [112] Is swap actually in the merged PMNS root file?
+          # This is NOT in .bad/.full — it's the underlying state the test reads
+          echo "--- [112] PMNS root swap presence ---"
+          grep -c "swap" $PCP_VAR_DIR/pmns/root 2>/dev/null \
+            && echo "=> swap IS present in merged root" \
+            || echo "=> swap NOT present in merged root"
+          echo "root_darwin swap entries:"
+          grep "swap" $PCP_VAR_DIR/pmns/root_darwin 2>/dev/null || echo "(none)"
+
+          # [256] Is sampledso PMDA accessible to pmlogrewrite?
+          # The .bad shows the rewrite failed; this shows WHY
+          echo ""
+          echo "--- [256] sampledso PMDA probe ---"
+          pminfo -m sampledso.secret 2>&1 || echo "sampledso.secret not accessible"
+          pminfo -m sampledso.ghosts 2>&1 || echo "sampledso.ghosts not accessible"
+
+          # [338] Service detection result — also in 338.full but easy to miss
+          echo ""
+          echo "--- [338] pmlogger service detection ---"
+          . $PCP_SHARE_DIR/lib/rc-proc.sh 2>/dev/null || true
+          VERBOSE_CONFIG=true is_chkconfig_on pmlogger \
+            && echo "=> true (will use 338.out.enabled)" \
+            || echo "=> false (will use 338.out.disabled)"
+
       - name: Upload QA logs
         if: always()
         uses: actions/upload-artifact@v4
