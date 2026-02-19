@@ -51,8 +51,9 @@ CmakeLists.txt
 provisioning/osxsierra.legally.ok
 *.gdb_history
 *vgcore.*
-tmpfiles.init.setup 
+tmpfiles.init.setup
 
 .env
 .mcp.json
 CLAUDE.local.md
+qa/src/__pycache__
