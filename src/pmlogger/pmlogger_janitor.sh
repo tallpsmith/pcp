@@ -444,7 +444,7 @@ then
 	# find(1) and awk(1), so just ignore any errors ...
 	#
 	$PCP_AWK_PROG <"$file" 2>&1 '
-NR == 3			{ dir = $1; sub(/\/[^/]*$/, "", dir) }
+NR == 3			{ dir = $1; sub(/\/[^\/]*$/, "", dir) }
 NR == 4 && NF == 1	{ if ($1 == "pmlogger_check" ||
 			      $1 == "reexec") {
 			    print "'"$pid"'	" dir >>"'$tmp/loggers'"

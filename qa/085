@@ -36,7 +36,9 @@ End-of-File
 
 pmlogger -L -c $tmp.config -l $tmp.out -s 1 $tmp >$tmp.err 2>&1 &
 killer=$!
-((sleep 4; $signal -s TERM $killer)&) >/dev/null 2>&1
+_timeout=4
+[ "$PCP_PLATFORM" = darwin ] && _timeout=20
+((sleep $_timeout; $signal -s TERM $killer)&) >/dev/null 2>&1
 wait
 
 cat $tmp.err $tmp.out | _filter
