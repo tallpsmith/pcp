@@ -20,45 +20,41 @@ progress, and feed insight to other agents who will do the actual fixing.
 - **Artifact name**: `qa-logs`
 - **Artifact contents**: `*.bad`, `*.full`, `check.log`, `/var/log/pcp/`, `/var/log/install.log`
 
+## Script Library
+
+All bash operations are performed by calling pre-approved scripts in
+`.claude/agents/scripts/`. **Never generate inline bash for operations these scripts
+cover.** Call the script with appropriate arguments instead.
+
+| Script | Purpose | Arguments |
+|--------|---------|-----------|
+| `qa-detect-context.sh` | Detect LOCAL_REPO, BRANCH, REPO | none |
+| `qa-find-runs.sh` | List recent workflow runs | `<repo> <workflow> [limit]` |
+| `qa-get-run-details.sh` | Get job/step details for a run | `<repo> <run-id>` |
+| `qa-download-artifacts.sh` | Download qa-logs artifact | `<repo> <run-id> <output-dir> [artifact-name]` |
+| `qa-get-failed-logs.sh` | Get failed-step log output | `<repo> <run-id> [line-limit]` |
+| `qa-commit-delta.sh` | Show commits between two SHAs | `<repo-path> [from-sha [to-sha]]` |
+| `qa-cleanup.sh` | Delete artifact dir (6 guards) | `<artifact-dir>` |
+
 ## Analysis Protocol
 
 ### Step 0: Detect Repository Context
 
 Detect environment. Variables set here are used throughout — never hardcode values.
 
-**Local repo path:**
 ```bash
-LOCAL_REPO=$(git rev-parse --show-toplevel 2>/dev/null)
-```
-If empty: stop and ask the user which repo/branch to analyse.
-
-**Current branch:**
-```bash
-BRANCH=$(git branch --show-current 2>/dev/null)
-[ -z "$BRANCH" ] && BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+bash .claude/agents/scripts/qa-detect-context.sh
 ```
 
-**GitHub repo (owner/repo) — two-phase detection:**
-```bash
-# Phase 1: use gh's configured default (respects `gh repo set-default`)
-REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null)
+Parse the output for `LOCAL_REPO=`, `BRANCH=`, `REPO=` values.
 
-# Phase 2: fallback — parse origin remote URL
-if [ -z "$REPO" ]; then
-  REMOTE_URL=$(git remote get-url origin 2>/dev/null)
-  REPO=$(echo "$REMOTE_URL" | sed -E 's|.*github\.com[:/]([^/]+/[^/]+?)(\.git)?$|\1|')
-fi
-```
-If `$REPO` is still empty after both phases: stop and ask the user.
+If `REPO` is empty in the output: stop and ask the user which repo/branch to analyse.
 
-If multiple remotes exist, report: "Multiple remotes detected. Using `$REPO` from `gh repo view`. Run `gh repo set-default` to change this."
+If multiple remotes exist, report: "Multiple remotes detected. Using `$REPO` from
+`gh repo view`. Run `gh repo set-default` to change this."
 
-**Workflow file:**
-```bash
-WORKFLOW_FILE="qa-macos.yml"
-[ ! -f "$LOCAL_REPO/.github/workflows/$WORKFLOW_FILE" ] && \
-  echo "Warning: $WORKFLOW_FILE not found in local repo — proceeding anyway"
-```
+Set `WORKFLOW_FILE="qa-macos.yml"` as a constant. Check with the Read tool whether
+`$LOCAL_REPO/.github/workflows/$WORKFLOW_FILE` exists — warn if not, but proceed.
 
 **Report detected context before proceeding:**
 ```
@@ -72,12 +68,12 @@ Context detected:
 ### Step 1: Find the Latest Run
 
 ```bash
-gh run list --repo "$REPO" --workflow "$WORKFLOW_FILE" --limit 5 --json databaseId,conclusion,createdAt,headSha,headBranch,displayTitle 2>/dev/null
+bash .claude/agents/scripts/qa-find-runs.sh "$REPO" "$WORKFLOW_FILE" 5
 ```
 
-Identify the most recent run. Note its `databaseId`, `conclusion`, and `headSha`.
-
-Also fetch the second most recent run for comparison (the previous run).
+Parse the JSON output. Identify the most recent run — note its `databaseId`,
+`conclusion`, and `headSha`. Also note the second most recent run for comparison
+(previous run).
 
 ### Step 2: Check Run Conclusion
 
@@ -97,30 +93,31 @@ If `conclusion` is `"failure"` or `"cancelled"` or still in progress:
 ### Step 3: Get Run Summary Details
 
 ```bash
-RUN_DETAILS=$(gh run view <run-id> --repo "$REPO" --json conclusion,createdAt,updatedAt,headSha,jobs 2>/dev/null)
-[ -z "$RUN_DETAILS" ] && echo "Warning: Could not fetch run details — run may be inaccessible"
+bash .claude/agents/scripts/qa-get-run-details.sh "$REPO" "$RUN_ID"
 ```
 
-Note which job steps failed. The `qa` job has many named steps — identify the first
-failing step name, as this tells us where the run broke down.
+Parse the JSON output. Note which job steps failed. The `qa` job has many named
+steps — identify the first failing step name, as this tells us where the run
+broke down.
+
+If the script returns empty output: warn that the run may be inaccessible and
+proceed with whatever information is available.
 
 ### Step 4: Download QA Artifacts
 
-Set artifact directory and download:
+Set the artifact directory path first, then download:
 
 ```bash
 ARTIFACT_DIR="$HOME/.claude/tmp/qa-analysis-<run-id>"
-mkdir -p "$ARTIFACT_DIR" 2>/dev/null
-gh run download <run-id> --repo "$REPO" -n qa-logs --dir "$ARTIFACT_DIR" 2>/dev/null
-DOWNLOAD_EXIT=$?
+bash .claude/agents/scripts/qa-download-artifacts.sh "$REPO" "$RUN_ID" "$ARTIFACT_DIR"
 ```
 
-If `DOWNLOAD_EXIT` is 0: set `ANALYSIS_PATH=A`. Report:
+If exit code is 0: set `ANALYSIS_PATH=A`. Report:
 ```
-Analysis path: A — artifacts downloaded
+Analysis path: A — artifacts downloaded to $ARTIFACT_DIR
 ```
 
-If `DOWNLOAD_EXIT` is non-zero (artifact may have expired after 7 days): set `ANALYSIS_PATH=B`. Report:
+If exit code is non-zero (artifact may have expired after 7 days): set `ANALYSIS_PATH=B`. Report:
 ```
 Analysis path: B — artifacts unavailable, using log output only
 ```
@@ -129,7 +126,7 @@ Analysis path: B — artifacts unavailable, using log output only
 
 **Path A only** — skip this step if `ANALYSIS_PATH=B`.
 
-Read `$ARTIFACT_DIR/check.log`.
+Use the Read tool to read `$ARTIFACT_DIR/check.log`.
 
 The PCP `check` script produces a summary at the end of check.log like:
 
@@ -150,8 +147,8 @@ Extract:
 - Tests failed
 - Tests not run (if applicable)
 
-Also look at the job step logs for "Run QA sanity tests" step output which may contain
-a compact summary.
+Also look at the job step logs for "Run QA sanity tests" step output which may
+contain a compact summary.
 
 ### Step 6: Retrieve Failed Step Logs (if needed)
 
@@ -159,7 +156,7 @@ a compact summary.
 **Path B**: This is the primary source of failure information.
 
 ```bash
-gh run view <run-id> --repo "$REPO" --log-failed 2>/dev/null | head -1000
+bash .claude/agents/scripts/qa-get-failed-logs.sh "$REPO" "$RUN_ID" 1000
 ```
 
 This shows output only from failed steps, which is far more useful than the full
@@ -169,16 +166,12 @@ multi-megabyte log.
 
 **Path A only** — skip this step if `ANALYSIS_PATH=B`.
 
-List all `.bad` files in the artifact download:
-
-```bash
-ls "$ARTIFACT_DIR"/*.bad 2>/dev/null
-```
+Use the Glob tool to list all `.bad` files: `$ARTIFACT_DIR/*.bad`
 
 For each `.bad` file:
 1. The filename tells you the test number (e.g., `001.bad` = test 001)
-2. Read the content — it's a diff showing expected vs actual output
-3. Extract the key error signatures (grep for: `Error`, `Cannot`, `failed`, `not found`,
+2. Use the Read tool to read it — it's a diff showing expected vs actual output
+3. Extract key error signatures (look for: `Error`, `Cannot`, `failed`, `not found`,
    `permission denied`, `No such`, `Segmentation`, `signal`, `pmErrStr`)
 
 **Categorise failures into groups** based on the dominant error pattern:
@@ -196,21 +189,17 @@ For each `.bad` file:
 
 ### Step 8: Recent Commit Impact Analysis
 
-Get the commits that contributed to the current run:
+Get commits for the current run and find the delta since the previous run:
 
 ```bash
-git -C "$LOCAL_REPO" log --oneline -10 --format="%h %s" HEAD 2>/dev/null
+# All recent commits (fallback if no prev SHA)
+bash .claude/agents/scripts/qa-commit-delta.sh "$LOCAL_REPO"
+
+# Commits between the previous run's SHA and current run's SHA
+bash .claude/agents/scripts/qa-commit-delta.sh "$LOCAL_REPO" "$PREV_SHA" "$CURRENT_SHA"
 ```
 
-Get the commit SHA from the previous run:
-```bash
-gh run list --repo "$REPO" --workflow "$WORKFLOW_FILE" --limit 5 --json databaseId,conclusion,headSha,createdAt 2>/dev/null
-```
-
-Find the commits between the previous run's SHA and the current run's SHA:
-```bash
-git -C "$LOCAL_REPO" log --oneline <prev-sha>..<current-sha> 2>/dev/null
-```
+Get the previous run's SHA from the run list retrieved in Step 1.
 
 **Assessment criteria:**
 - If failure count DECREASED: The recent commits made progress. Note which categories
@@ -224,86 +213,30 @@ git -C "$LOCAL_REPO" log --oneline <prev-sha>..<current-sha> 2>/dev/null
 
 **Path A only** — skip this step if `ANALYSIS_PATH=B`.
 
-For the top 3 failure categories, read the `.full` files for representative tests to get
-richer context. A `.full` file contains the complete test output, not just the diff.
+For the top 3 failure categories, use the Read tool on the `.full` files for
+representative tests to get richer context. A `.full` file contains the complete
+test output, not just the diff.
 
-For each representative test, extract a **Key Error Signature** (≤4 lines, noise-filtered):
-
-```bash
-grep -m 4 -iE "(Error|Cannot|failed|not found|permission denied|No such|dylib|signal|Segfault|pmErrStr)" \
-    "$ARTIFACT_DIR/<test-id>.full" 2>/dev/null \
-    | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:Z.]+[[:space:]]*//' \
-    | sed -E 's/0x[0-9a-fA-F]{6,}/0x<ADDR>/g'
-```
+For each representative test, extract a **Key Error Signature** (≤4 lines) using
+the Grep tool on `$ARTIFACT_DIR/<test-id>.full` with pattern:
+`(Error|Cannot|failed|not found|permission denied|No such|dylib|signal|Segfault|pmErrStr)`
 
 Fallback (if 0 matches): take first 4 lines starting with `+` from the `.bad` diff file.
 
-Then read the full file for broader context:
-```bash
-head -100 "$ARTIFACT_DIR/<test-id>.full" 2>/dev/null
-```
+Then use the Read tool on `$ARTIFACT_DIR/<test-id>.full` with limit 100 for broader
+context.
 
 ### Step 10: Cleanup
 
-Remove temp artifacts unconditionally — even if earlier steps failed — but with
-paranoid safety guards BEFORE any delete. NEVER skip the guards.
+Run unconditionally — even if earlier steps failed. The script has 6 guards and
+will abort safely if anything looks wrong.
 
 ```bash
-SAFE_PREFIX="$HOME/.claude/tmp/qa-analysis-"
-
-# Guard 1: ARTIFACT_DIR must not be empty or unset
-if [ -z "${ARTIFACT_DIR:-}" ]; then
-  echo "CLEANUP ABORTED: ARTIFACT_DIR is unset or empty. Skipping delete to avoid disaster."
-  return 0
-fi
-
-# Guard 2: Must start with the exact expected safe prefix
-case "$ARTIFACT_DIR" in
-  "$SAFE_PREFIX"*)
-    : # prefix OK
-    ;;
-  *)
-    echo "CLEANUP ABORTED: ARTIFACT_DIR '$ARTIFACT_DIR' does not start with '$SAFE_PREFIX'. Skipping delete."
-    return 0
-    ;;
-esac
-
-# Guard 3: Must not contain path traversal (..)
-case "$ARTIFACT_DIR" in
-  *..*)
-    echo "CLEANUP ABORTED: ARTIFACT_DIR contains '..'. Skipping delete."
-    return 0
-    ;;
-esac
-
-# Guard 4: Must have a non-empty suffix after the prefix (can't delete the prefix dir itself)
-SUFFIX="${ARTIFACT_DIR#$SAFE_PREFIX}"
-if [ -z "$SUFFIX" ]; then
-  echo "CLEANUP ABORTED: ARTIFACT_DIR has no run-specific suffix. Skipping delete."
-  return 0
-fi
-
-# Guard 5: Suffix must not contain path separators (no sneaky subdirectory tricks)
-case "$SUFFIX" in
-  */* | *\\*)
-    echo "CLEANUP ABORTED: ARTIFACT_DIR suffix contains path separators. Skipping delete."
-    return 0
-    ;;
-esac
-
-# Guard 6: Final sanity — the path must actually be a directory (not a file or symlink to /)
-if [ ! -d "$ARTIFACT_DIR" ]; then
-  echo "CLEANUP SKIPPED: '$ARTIFACT_DIR' is not a directory (may already be cleaned up)."
-  return 0
-fi
-
-# All 6 guards passed — safe to delete
-echo "Cleanup: removing $ARTIFACT_DIR"
-rm -rf "$ARTIFACT_DIR"
+bash .claude/agents/scripts/qa-cleanup.sh "$ARTIFACT_DIR"
 ```
 
-If any guard triggers, log the message and continue — do NOT crash the analysis. Manual
-cleanup (`rm -rf ~/.claude/tmp/qa-analysis-*`) is safe to run by hand if needed.
+If `ANALYSIS_PATH=B` (no artifacts downloaded), call the script anyway — it will
+report "not a directory" and exit cleanly.
 
 ## Output Format
 
@@ -404,3 +337,4 @@ file categories cannot be computed. Failure summary derived from step logs only.
 - Keep the report factual and precise. No waffle, no speculation beyond what the data shows.
 - When reading `.bad` files, remember they're diffs: lines starting with `+` are in
   actual output but not expected; lines starting with `-` are in expected but not actual.
+- **Never generate ad-hoc bash for git or gh operations.** Use the script library.
