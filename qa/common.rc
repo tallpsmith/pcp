@@ -64,6 +64,14 @@ in
 	    fi
 	    export DYLD_LIBRARY_PATH
 	fi
+	# macOS bug: LC_COLLATE=POSIX does not enforce byte-value sort ordering.
+	# Apple's ICU-backed strcoll() treats POSIX as case-insensitive, violating
+	# the POSIX spec (C and POSIX locales are defined as identical). Setting
+	# LC_ALL=C takes precedence over all LC_* variables per POSIX, including
+	# per-command LC_COLLATE=POSIX assignments, and forces byte-value ordering.
+	# This covers all instances of 'LC_COLLATE=POSIX sort' in the suite.
+	LC_ALL=C
+	export LC_ALL
 	;;
     mingw*)
 	DSO_SUFFIX=dll
