@@ -622,6 +622,83 @@ jobs:
             && echo "=> true (will use 338.out.enabled)" \
             || echo "=> false (will use 338.out.disabled)"
 
+      - name: QA Test Results Summary
+        if: always()
+        run: |
+          CHECKLOG="/var/lib/pcp/testsuite/check.log"
+          {
+            echo "## QA Test Results"
+            echo ""
+            if [ ! -f "$CHECKLOG" ]; then
+              echo "> :warning: \`check.log\` not found - QA tests may not have run"
+            else
+              # Extract the final result line written by the check script
+              RESULT=$(grep -E "^(Passed [0-9]+ tests$|Failed [0-9]+ of [0-9]+ tests$|No tests passed$)" "$CHECKLOG" | tail -1)
+
+              if [ -z "$RESULT" ]; then
+                echo "> :warning: No result summary found in \`check.log\` - QA run may have been interrupted"
+              else
+                # Parse counts from the result line
+                if echo "$RESULT" | grep -qE "^Failed [0-9]+ of [0-9]+ tests"; then
+                  FAILED=$(echo "$RESULT" | grep -oE "^Failed [0-9]+" | grep -oE "[0-9]+")
+                  TOTAL=$(echo "$RESULT" | grep -oE "of [0-9]+" | grep -oE "[0-9]+")
+                  PASSED=$((TOTAL - FAILED))
+                elif echo "$RESULT" | grep -qE "^Passed [0-9]+ tests"; then
+                  PASSED=$(echo "$RESULT" | grep -oE "[0-9]+")
+                  FAILED=0
+                  TOTAL=$PASSED
+                else
+                  PASSED=0; FAILED=0; TOTAL=0
+                fi
+
+                # Count not-run tests from the Not run: line (written by check script with fmt)
+                NOT_RUN_LINE=$(grep "^Not run:" "$CHECKLOG" | tail -1)
+                if [ -n "$NOT_RUN_LINE" ]; then
+                  NOT_RUN=$(echo "$NOT_RUN_LINE" | sed 's/Not run://' | wc -w | tr -d ' ')
+                else
+                  NOT_RUN=0
+                fi
+
+                echo "| Result | Count |"
+                echo "|--------|-------|"
+                echo "| Passed | $PASSED |"
+                echo "| Failed | $FAILED |"
+                echo "| Not Run | $NOT_RUN |"
+                echo "| **Total Attempted** | **$TOTAL** |"
+                echo ""
+
+                # Show failures inline if any
+                FAILURES_LINE=$(grep "^Failures:" "$CHECKLOG" | tail -1)
+                if [ -n "$FAILURES_LINE" ]; then
+                  echo "**Failures:**"
+                  echo "\`\`\`"
+                  echo "$FAILURES_LINE" | sed 's/Failures://'
+                  echo "\`\`\`"
+                fi
+
+                # Show triaged tests if any
+                TRIAGED_LINE=$(grep "^Triaged:" "$CHECKLOG" | tail -1)
+                if [ -n "$TRIAGED_LINE" ]; then
+                  echo "**Triaged:**"
+                  echo "\`\`\`"
+                  echo "$TRIAGED_LINE" | sed 's/Triaged://'
+                  echo "\`\`\`"
+                fi
+
+                # Collapse the not-run list since it's usually long
+                if [ -n "$NOT_RUN_LINE" ]; then
+                  echo "<details>"
+                  echo "<summary>Not run tests ($NOT_RUN)</summary>"
+                  echo ""
+                  echo "\`\`\`"
+                  echo "$NOT_RUN_LINE" | sed 's/Not run://'
+                  echo "\`\`\`"
+                  echo "</details>"
+                fi
+              fi
+            fi
+          } >> $GITHUB_STEP_SUMMARY
+
       - name: Upload QA logs
         if: always()
         uses: actions/upload-artifact@v4
