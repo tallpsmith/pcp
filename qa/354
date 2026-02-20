@@ -154,7 +154,7 @@ p
 | _filter_ps \
 | tee $tmp.tmp \
 | sed -f $tmp.sed \
-| LC_ALL=C sort
+| LC_COLLATE=POSIX sort
 pid=`$PCP_AWK_PROG '{ print $2 }' <$tmp.tmp`
 if [ -z "$pid" ]
 then
@@ -200,8 +200,8 @@ do
     new=`echo $file | sed -e "s/$MKTEMP/MKTEMP/" -e "s/$host/HOST/"`
     [ "$new" != "$file" ] && mv $file $new
 done
-LC_ALL=C ls
-for log in `LC_ALL=C ls *.log`
+LC_COLLATE=POSIX ls
+for log in `LC_COLLATE=POSIX ls *.log`
 do
     echo
     echo "=== $log ==="
@@ -246,7 +246,7 @@ p
 | _filter_ps \
 | tee $tmp.tmp \
 | sed -f $tmp.sed \
-| LC_ALL=C sort
+| LC_COLLATE=POSIX sort
 pid=`$PCP_AWK_PROG '{ print $2 }' <$tmp.tmp`
 if [ -z "$pid" ]
 then
@@ -286,8 +286,8 @@ do
     new=`echo $file | sed -e "s/$MKTEMP/MKTEMP/" -e "s/$host/HOST/"`
     [ "$new" != "$file" ] && mv $file $new
 done
-LC_ALL=C ls
-for log in `LC_ALL=C ls *.log`
+LC_COLLATE=POSIX ls
+for log in `LC_COLLATE=POSIX ls *.log`
 do
     echo
     echo "=== $log ==="
