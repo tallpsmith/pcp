@@ -47,7 +47,12 @@ _filter()
 	-e "s;$PCP_TMP_DIR/;PCP_TMP_DIR/;g" \
 	-e "s;$PCP_TMPFILE_DIR/pmlogctl\.[^/]*;PCP_TMPFILE_DIR/pmlogctl.XXXXX;g" \
 	-e "s;$PCP_ETC_DIR/;PCP_ETC_DIR/;g" \
+	-e '/^ *[+]* *Log for pmlogger on /d' \
+	-e '/^ *[+]* *\[.*\] pmlogger([0-9]*) Info:/d' \
     # end
+    # Note: on macOS, pmlogger startup log lines can leak to stdout
+    # when pmlogger_check is invoked via runaspcp's "sh -c" wrapper,
+    # because fd inheritance differs from Linux/systemd.
 }
 
 # Build filter for any existing non-qa and non-primary pmlogger instances.

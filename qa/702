@@ -27,7 +27,7 @@ _filter()
     tee -a $seq_full \
     | sed \
 	-e 's/0x[0-9a-f][0-9a-f]*/ADDR/g' \
-	-e "/^pmGetContextHostName:/s/`hostname`/HOSTNAME/" \
+	-e '/^pmGetContextHostName:/s/:.*/: HOSTNAME/' \
 	-e '/^tv_/s/[0-9][0-9]*/NUMBER/' \
 	-e '/^pmExtractValue:/s/[0-9][0-9]*/NUMBER/' \
 	-e '/^pmTraversePMNS:/s/[0-9][0-9]*/NUMBER/' \
@@ -45,6 +45,18 @@ _filter()
 s/.pernode., //
 s/1, //
 }' \
+    | $python -c "
+import sys, re
+
+def sort_list(m):
+    items = [x.strip() for x in m.group(1).split(',')]
+    return '[' + ', '.join(sorted(items)) + ']'
+
+for line in sys.stdin:
+    if line.startswith('pmGetChildren:') or line.startswith('pmGetChildrenStatus:'):
+        line = re.sub(r'\[([^\]]+)\]', sort_list, line)
+    sys.stdout.write(line)
+" \
     # end
 }
 
