@@ -172,9 +172,15 @@ cat $tmp.config | tee -a $seq_full
 _filter_derived()
 {
     # look for metric names containing "derived", apply a blocklist
+    # also suppress "Semantic error: derived metric ..." messages from
+    # global derived metric configs (e.g. src/derived/proc.conf) that
+    # reference metrics not available on this platform (e.g. proc.io.*
+    # on macOS) - these errors contain "derived" and would otherwise
+    # pollute the output
     grep derived | \
     sed \
 	-e '/perfevent.derived/d' \
+	-e '/^.*Semantic error: derived metric/d' \
     #end
 }
 
