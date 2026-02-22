@@ -282,6 +282,46 @@ jobs:
           echo "pmie instances:"
           pgrep -l pmie || echo "No pmie processes yet (may take a moment)"
 
+      - name: Diagnose pmcd hostname connectivity
+        run: |
+          echo "=== Hostname identification ==="
+          echo "hostname:   $(hostname)"
+          echo "hostname-f: $(hostname -f 2>/dev/null || echo 'n/a')"
+          echo ""
+
+          echo "=== Hostname DNS resolution ==="
+          H=$(hostname)
+          python3 -c "
+import socket
+h = '$H'
+try:
+    ip = socket.gethostbyname(h)
+    print(f'gethostbyname({h!r}) = {ip}')
+except Exception as e:
+    print(f'gethostbyname({h!r}) FAILED: {e}')
+"
+          dscacheutil -q host -a name "$H" 2>/dev/null || echo "(dscacheutil: no result)"
+          echo ""
+
+          echo "=== pmcd listening sockets ==="
+          sudo lsof -c pmcd -i -P -n 2>/dev/null || echo "(lsof failed)"
+          echo ""
+
+          echo "=== PCP port in netstat ==="
+          netstat -an 2>/dev/null | grep -E '\.(44321|44322) ' || echo "(no pcp ports found)"
+          echo ""
+
+          echo "=== pmprobe via localhost ==="
+          pmprobe -h localhost pmcd.numclients 2>&1
+          echo ""
+
+          echo "=== pmprobe via hostname ==="
+          pmprobe -h "$(hostname)" pmcd.numclients 2>&1 || echo "FAILED (exit $?)"
+          echo ""
+
+          echo "=== pmcd.log (last 60 lines) ==="
+          tail -60 /var/log/pcp/pmcd/pmcd.log 2>/dev/null || echo "(pmcd.log not found)"
+
       - name: Set QA directory permissions
         run: |
           echo "Giving pcpqa ownership of QA directory..."
