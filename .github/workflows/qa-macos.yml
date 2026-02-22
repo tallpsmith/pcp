@@ -291,16 +291,8 @@ jobs:
 
           echo "=== Hostname DNS resolution ==="
           H=$(hostname)
-          python3 << 'PYEOF'
-import socket, os
-h = os.uname().nodename
-try:
-    ip = socket.gethostbyname(h)
-    print('gethostbyname(%r) = %s' % (h, ip))
-except Exception as e:
-    print('gethostbyname(%r) FAILED: %s' % (h, e))
-PYEOF
-          dscacheutil -q host -a name "$H" 2>/dev/null || echo "(dscacheutil: no result)"
+          dscacheutil -q host -a name "$H" 2>/dev/null || echo "(dscacheutil: no result for $H)"
+          ping -c 1 -t 2 "$H" 2>&1 | head -3 || echo "(ping $H failed)"
           echo ""
 
           echo "=== pmcd listening sockets ==="
