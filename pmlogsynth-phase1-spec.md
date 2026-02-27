@@ -175,7 +175,7 @@ meta:
   hostname: synthetic-host
   timezone: UTC
   duration: 1800        # total archive length in seconds
-  interval: 10          # sample interval in seconds
+  interval: 60          # sample interval in seconds [default: 60]
   noise: 0.03           # global Gaussian noise factor (3%); overridable per domain
 
 host:
@@ -300,7 +300,10 @@ profile (e.g. `nvme0n1`, `eth0`).
 - Sum of phase durations == `meta.duration` (when no `repeat` key is present)
 - `host.profile` must resolve to a known profile name
 - All `noise` values must be in range [0.0, 1.0]
-- `interval` must be a positive integer, in seconds
+- `interval` must be a positive integer, in seconds. **Default: 60.**
+  Archive size grows linearly with sample count: a 7-day archive at `interval: 1`
+  produces ~600,000 samples; at `interval: 60` it produces ~10,000. Use fine-grained
+  intervals only for short archives where sub-minute resolution is required.
 
 ---
 
