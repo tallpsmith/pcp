@@ -274,8 +274,9 @@ pmlogsynth fleet -o ./cluster web-cluster.yaml
 ### Parallel Generation
 
 Each host archive is independent and can be generated concurrently. `--jobs` defaults
-to the number of available CPU cores. For large fleets this makes generation time scale
-with hardware rather than host count.
+to the number of available CPU cores, implemented via `concurrent.futures.ProcessPoolExecutor`
+from the Python standard library — no additional dependency is required. For large fleets
+this makes generation time scale with hardware rather than host count.
 
 ---
 
@@ -306,9 +307,9 @@ Named fault scenarios that Claude can reference when generating anomaly overlays
 
 ---
 
-## 8. Referencing Fleet Archives from QA Tests
+## 8. Referencing Fleet Archives from Tests
 
-The fleet manifest enables straightforward QA test assertions:
+The fleet manifest enables straightforward test assertions in any test framework:
 
 ```bash
 # Shell example: verify a fleet-aware analysis tool flags the right hosts
@@ -324,29 +325,84 @@ got=$(wc -l < ./results.txt)
 [ "$expected" -eq "$got" ] || fail "Expected $expected flagged hosts, got $got"
 ```
 
+In `pytest`:
+
+```python
+# tests/test_fleet_integration.py
+
+def test_fleet_anomalous_hosts_are_identifiable(tmp_path):
+    subprocess.run(
+        ["pmlogsynth", "fleet", "--seed", "42", "-o", str(tmp_path), "tests/fixtures/web-cluster.yaml"],
+        check=True,
+    )
+    manifest = yaml.safe_load((tmp_path / "fleet.manifest").read_text())
+    anomalous = [a for a in manifest["archives"] if a["anomalies"]]
+    assert len(anomalous) == 2
+    assert all(a["group"] == "web-degraded" for a in anomalous)
+```
+
 ---
 
-## 9. File Layout
+## 9. Project Layout Changes
 
 Phase 3 adds the following to the Phase 1 + Phase 2 layout:
 
 ```
-qa/pmlogsynth/
-├── fleet.py                # Fleet profile loader, group expander, manifest writer
-├── overlay.py              # Anomaly overlay merge logic
-├── jitter.py               # Per-host deterministic value variation
-└── profiles/fleet/         # Example fleet profiles
-    ├── small-web-cluster.yaml
-    └── mixed-db-web.yaml
+pmlogsynth/
+├── fleet.py                # fleet profile loader, group expander, manifest writer
+├── overlay.py              # anomaly overlay merge logic
+├── jitter.py               # per-host deterministic value variation
+└── profiles/
+    └── fleet/              # example fleet profiles (package data)
+        ├── small-web-cluster.yaml
+        └── mixed-db-web.yaml
 
-qa/
-└── NNNNN                   # QA test: generate fleet, verify manifest,
-                            #   assert anomalous hosts are identifiable
+tests/
+├── test_fleet.py           # fleet profile loading, overlay merging, jitter
+├── test_fleet_integration.py  # end-to-end fleet generation (requires PCP installed)
+└── fixtures/
+    └── web-cluster.yaml    # reference fleet profile used in tests
+```
+
+The example fleet profiles in `pmlogsynth/profiles/fleet/` are installed as package
+data alongside the bundled hardware profiles.
+
+---
+
+## 10. Test Requirements
+
+### Tier 1 — unit tests (no PCP required)
+
+- Fleet profile loading and validation
+- Anomaly overlay merge logic (field precedence, time window application)
+- Jitter reproducibility: same host name + same seed → same offsets
+- Jitter clamping: ratio fields stay in [0.0, 1.0] after jitter
+- `--dry-run` output matches expected host list and group assignments
+
+### Tier 2 — integration tests (PCP must be installed)
+
+- Generate a small fleet (3–5 hosts) from the reference fixture
+- Assert `fleet.manifest` is written and well-formed YAML
+- Assert each archive passes `pmlogcheck`
+- Assert anomalous hosts in the manifest match the fleet profile definition
+- Assert `--seed` reproducibility: two runs with the same seed produce byte-identical archives
+
+Tier 2 tests are skipped automatically if `pmlogcheck` is not found on `PATH`.
+
+```bash
+# Run all tests
+pytest
+
+# Run only fleet tests
+pytest tests/test_fleet.py tests/test_fleet_integration.py
+
+# Run only unit tests (no PCP needed)
+pytest -m "not integration"
 ```
 
 ---
 
-## 10. Future Enhancements
+## 11. Future Enhancements
 
 | Item | Notes |
 |------|-------|

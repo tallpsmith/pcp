@@ -11,7 +11,7 @@
 
 Phase 1 of `pmlogsynth` delivered a command-line tool that generates valid PCP archives
 from declarative YAML workload profiles. It ships with a library of named hardware
-profiles (bundled in `qa/pmlogsynth/profiles/`, user-extensible via
+profiles (bundled in `pmlogsynth/profiles/`, user-extensible via
 `~/.pcp/pmlogsynth/profiles/`) and supports multi-phase workload timelines with noise,
 linear transitions, and repeating patterns.
 
@@ -150,7 +150,7 @@ User prompt (natural language)
 The Phase 2 addition to `pmlogsynth` is small. The core client is straightforward:
 
 ```python
-# qa/pmlogsynth/agent/client.py
+# pmlogsynth/agent/client.py
 
 import anthropic
 import sys
@@ -186,7 +186,7 @@ def _load_system_prompt() -> str:
 The CLI change in `pmlogsynth` is equally minimal:
 
 ```python
-# In the main CLI argument parser (pmlogsynth):
+# In pmlogsynth/cli.py:
 
 if args.prompt:
     _check_api_key()
@@ -222,6 +222,7 @@ Claude returns YAML text directly; the system prompt is responsible for ensuring
 | Condition | Behaviour |
 |-----------|-----------|
 | `ANTHROPIC_API_KEY` not set | Clear error message with URL; exit non-zero |
+| `anthropic` package not installed | Clear error message with `pip install pmlogsynth[ai]`; exit non-zero |
 | API call fails (network, rate limit, etc.) | Surface the API error message; exit non-zero |
 | Generated YAML fails `--validate` | Inform the user; suggest editing the file or refining the prompt; exit non-zero |
 | `--run` with invalid profile | Same as above; no archive is written |
@@ -234,7 +235,7 @@ the user sees the validation error and decides how to proceed.
 ## 5. The System Prompt
 
 The system prompt is the core of Phase 2. It is stored as a versioned file
-(`qa/pmlogsynth/agent/system_prompt.md`) and maintained alongside the YAML schema —
+(`pmlogsynth/agent/system_prompt.md`) and maintained alongside the YAML schema —
 if the schema changes, the system prompt must be updated in the same commit.
 
 ### 5.1 Contents
@@ -336,7 +337,7 @@ questions whose impact on the output is not immediately visible.
 sharpens the prompt and regenerates. This is the natural interaction model for LLM
 tooling and requires no special infrastructure.
 
-Interactive mode remains listed as a future enhancement (§9) if a clear use case
+Interactive mode remains listed as a future enhancement (§10) if a clear use case
 emerges.
 
 ---
@@ -356,44 +357,80 @@ small, single-turn request — typically well under 2,000 output tokens.
 
 ---
 
-## 9. File Layout
+## 9. Installation
+
+Phase 2 is shipped as an optional extras group so the `anthropic` SDK is not installed
+for users who do not need `--prompt`:
+
+```bash
+# Core install (no AI features)
+pip install pmlogsynth
+
+# With natural language profile generation
+pip install "pmlogsynth[ai]"
+```
+
+`pyproject.toml`:
+
+```toml
+[project.optional-dependencies]
+ai = ["anthropic>=0.20.0"]
+```
+
+If `--prompt` is invoked without the `ai` extras installed, `pmlogsynth` exits with a
+clear error:
+
+```
+pmlogsynth: --prompt requires the 'anthropic' package.
+Install it with: pip install "pmlogsynth[ai]"
+```
+
+---
+
+## 10. Project Layout Changes
 
 Phase 2 adds the following to the Phase 1 layout:
 
 ```
-qa/pmlogsynth/
+pmlogsynth/
 └── agent/
     ├── client.py           # Anthropic API wrapper; generate_profile()
     └── system_prompt.md    # Schema + constraints + archetypes + output instructions
                             # Versioned alongside the YAML schema
-```
 
-New runtime dependency (added to package requirements):
-
+tests/
+└── test_agent.py           # Phase 2 tests (all mocked; no live API calls)
 ```
-anthropic>=0.20.0
-```
-
-This dependency is optional at install time: `pmlogsynth` functions fully without it,
-and the `--prompt` flag fails with a clear message if the package is not present.
 
 ---
 
-## 10. QA Test Requirements
+## 11. Test Requirements
 
-A QA test must be included that:
+Tests live in `tests/test_agent.py` and use `unittest.mock` (stdlib) to mock the
+Anthropic API. No live API calls are made; no API key is required to run the test suite.
 
-1. Mocks the Anthropic API call to return a known, fixed YAML profile
-2. Asserts the profile is written correctly to the output path
-3. Runs `pmlogsynth --validate` on the output and asserts it passes
-4. Asserts that the header assumption block is present in the output
-5. Asserts that a missing `ANTHROPIC_API_KEY` produces a clear error and non-zero exit
+The test suite must cover:
 
-The test must not make live API calls or require a real API key.
+1. Mock the `anthropic.Anthropic().messages.create()` call to return a known, fixed
+   YAML profile; assert the profile is written correctly to the output path
+2. Run `pmlogsynth --validate` on the mocked output and assert it passes
+3. Assert that the header assumption block is present in the generated output
+4. Assert that a missing `ANTHROPIC_API_KEY` produces a clear error message and
+   non-zero exit code
+5. Assert that `--prompt` without the `anthropic` package installed produces a clear
+   install hint and non-zero exit code
+
+```bash
+# Run all tests including Phase 2
+pytest
+
+# Run only Phase 2 tests
+pytest tests/test_agent.py
+```
 
 ---
 
-## 11. Future Enhancements
+## 12. Future Enhancements
 
 | Item | Notes |
 |------|-------|

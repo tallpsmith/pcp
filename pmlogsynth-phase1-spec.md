@@ -35,7 +35,19 @@ toolchain.
 
 ---
 
-## 3. Goals
+## 3. Project Overview
+
+`pmlogsynth` is a standalone Python project distributed via PyPI and developed independently
+of PCP. It depends on PCP being installed on the host (for `libpcp_import` and the `pcp`
+Python bindings), but is otherwise self-contained.
+
+The project is intended for eventual contribution back to PCP, but operates as its own
+repository to allow faster iteration, independent releases, and contributions from users
+who are not PCP committers.
+
+---
+
+## 4. Goals
 
 - Produce archives indistinguishable in format from `pmlogger` output
 - Support real PCP metric namespaces (kernel, disk, network, memory) with correct units
@@ -64,7 +76,35 @@ The following are explicitly deferred and will not be addressed in this phase:
 
 ---
 
-## 4. Architecture
+## 5. Dependencies
+
+### Runtime
+
+| Dependency | How to install | Notes |
+|---|---|---|
+| **Python 3.8+** | System package manager | `python3` |
+| **PCP** | See [PCP installation docs](https://pcp.io/docs/guide.html) | Provides `libpcp_import.so` and the `pcp` Python bindings |
+| **`python3-pcp`** | System package manager | RPM: `python3-pcp`; Deb: `python3-pcp`; provides `pcp.pmi`, `pcp.pmapi`, and the `cpmi` C extension |
+| **PyYAML** | `pip install pyyaml` | Profile parsing |
+
+### Optional (Phase 2 — natural language generation)
+
+| Dependency | How to install | Notes |
+|---|---|---|
+| **`anthropic>=0.20.0`** | `pip install anthropic` | Anthropic Python SDK; only needed for `--prompt` |
+
+### Not required
+
+- No C compiler (pure Python after PCP is installed)
+- No `numpy` — Gaussian noise uses `random.gauss` from stdlib
+- No running `pmcd`
+- No root access
+- No database, message queue, or web service
+- Phase 3 parallel `--jobs` uses `concurrent.futures` from stdlib
+
+---
+
+## 6. Architecture
 
 ```
 profile.yaml
@@ -79,7 +119,7 @@ profile.yaml
  ValueSampler
      │  (applies Gaussian noise, accumulates counters, coerces types)
      ▼
- libpcp_import  (via pmi.pmiLogImport Python bindings)
+ libpcp_import  (via pcp.pmi.pmiLogImport Python bindings)
      │
      ▼
 output.{0,index,meta}
@@ -87,21 +127,22 @@ output.{0,index,meta}
 
 ### Implementation Language
 
-Python 3. Depends only on the `pcp` Python module (included in any PCP installation).
-No third-party dependencies are required.
+Python 3. Depends only on the `pcp` Python package (installed alongside any PCP
+installation that includes Python bindings) and PyYAML. No other third-party dependencies
+are required for core archive generation.
 
 ---
 
-## 5. Hardware Profile Library
+## 7. Hardware Profile Library
 
-### 5.1 Concept
+### 7.1 Concept
 
 A hardware profile is a named YAML document that describes the physical or virtual host
 being simulated: CPU count, RAM, disk devices, and network interfaces. Profiles decouple
 the "what hardware" question from the "what workload" question, making profiles reusable
 across many workload scenarios.
 
-### 5.2 Bundled Profiles
+### 7.2 Bundled Profiles
 
 `pmlogsynth` ships with a small set of generic reference host profiles. These are loosely
 inspired by common cloud instance tiers but are not tied to any vendor — they serve as
@@ -117,9 +158,10 @@ reasonable, recognisable starting points.
 | `memory-optimized`  | 4    | 64 GB  | 1× NVMe         | 1× 10 GbE   | High RAM, modest CPU   |
 | `storage-optimized` | 4    | 16 GB  | 4× HDD          | 1× 10 GbE   | High disk capacity     |
 
-Bundled profiles live in `qa/pmlogsynth/profiles/` as individual YAML files.
+Bundled profiles are packaged inside the `pmlogsynth/profiles/` directory and installed
+as package data alongside the Python source.
 
-### 5.3 User-Defined Profiles
+### 7.3 User-Defined Profiles
 
 Users may define their own profiles — or override bundled ones — by placing YAML files in:
 
@@ -153,21 +195,21 @@ interfaces:
     speed_mbps: 25000
 ```
 
-### 5.4 Build-Time Validation
+### 7.4 Profile Validation in CI
 
-The build system runs a schema validation pass over all bundled profiles in
-`qa/pmlogsynth/profiles/`. Any malformed profile fails the build. Content review
+The CI pipeline runs a schema validation pass over all bundled profiles in
+`pmlogsynth/profiles/`. Any malformed profile fails the test run. Content review
 of contributed profiles remains a human responsibility.
 
 ---
 
-## 6. Profile Format
+## 8. Profile Format
 
 A profile is a YAML file that describes the simulated host and a timeline of workload
 **phases**. Each phase has a duration and a set of **stressors** that drive one or more
 metric domains.
 
-### 6.1 Full Example
+### 8.1 Full Example
 
 ```yaml
 # cpu-memory-spike.yaml
@@ -240,14 +282,14 @@ phases:
       tx_mbps: 2.0
 ```
 
-### 6.2 Phase Transitions
+### 8.2 Phase Transitions
 
 | Value | Behaviour |
 |-------|-----------|
 | `instant` (default) | Values jump immediately at the phase boundary |
 | `linear` | Values interpolate linearly over the full phase duration from prior phase end values |
 
-### 6.3 Repeating Phases
+### 8.3 Repeating Phases
 
 A phase may include a `repeat` key to express recurring patterns without copy-pasting.
 The timeline sequencer expands repeats before writing begins.
@@ -275,7 +317,7 @@ When `repeat: daily` is used, the sequencer inserts the baseline phase between e
 repetition to fill the 24-hour period. `meta.duration` must accommodate the full
 expanded timeline; the validator will reject profiles where this does not hold.
 
-### 6.4 Noise
+### 8.4 Noise
 
 A `noise:` key at domain level overrides `meta.noise` for that domain only:
 
@@ -288,13 +330,13 @@ A `noise:` key at domain level overrides `meta.noise` for that domain only:
       write_mbps: 5.0
 ```
 
-### 6.5 Instance Domains
+### 8.5 Instance Domains
 
 Disk and NIC instances are derived from the host configuration and remain **fixed**
 for the lifetime of the archive. Instance names match the device names in the host
 profile (e.g. `nvme0n1`, `eth0`).
 
-### 6.6 Constraints Enforced at Validation
+### 8.6 Constraints Enforced at Validation
 
 - `user_ratio + sys_ratio + iowait_ratio ≤ 1.0` (remainder is steal/other)
 - Sum of phase durations == `meta.duration` (when no `repeat` key is present)
@@ -307,12 +349,12 @@ profile (e.g. `nvme0n1`, `eth0`).
 
 ---
 
-## 7. Metric Domains and Consistency Model
+## 9. Metric Domains and Consistency Model
 
 Each domain is a self-contained `MetricModel` subclass that accepts high-level stressor
 values and derives all related PCP metrics, enforcing internal constraints at every sample.
 
-### 7.1 CPU Domain
+### 9.1 CPU Domain
 
 **PCP metrics:** `kernel.all.cpu.*`, `kernel.percpu.cpu.*`
 
@@ -329,7 +371,7 @@ interval.
 across samples so that rate-based tools (`pmval`, `pmrep`) produce correct results when
 replaying the archive.
 
-### 7.2 Memory Domain
+### 9.2 Memory Domain
 
 **PCP metrics:** `mem.util.*`
 
@@ -341,7 +383,7 @@ replaying the archive.
 
 **Constraint enforced:** `used + free == physmem`. `available ≈ free + cached`.
 
-### 7.3 Disk Domain
+### 9.3 Disk Domain
 
 **PCP metrics:** `disk.all.*`, `disk.dev.*`
 
@@ -353,7 +395,7 @@ replaying the archive.
 
 **Metric type:** counter (cumulative bytes and ops).
 
-### 7.4 Network Domain
+### 9.4 Network Domain
 
 **PCP metrics:** `network.interface.*`
 
@@ -365,7 +407,7 @@ replaying the archive.
 Packet counts are estimated from byte totals assuming a 1400-byte mean packet size
 (configurable via a top-level `meta.mean_packet_bytes` key).
 
-### 7.5 Load Average Domain
+### 9.5 Load Average Domain
 
 **PCP metrics:** `kernel.all.load`
 
@@ -375,7 +417,7 @@ UNIX load average decay constants.
 
 ---
 
-## 8. CLI Interface
+## 10. CLI Interface
 
 ```
 pmlogsynth [OPTIONS] PROFILE
@@ -415,7 +457,7 @@ pmlogsynth --list-metrics
 
 ---
 
-## 9. Output
+## 11. Output
 
 `pmlogsynth` produces a standard PCP v3 archive:
 
@@ -436,57 +478,106 @@ pcp     -a ./out atop
 
 ---
 
-## 10. File Layout
+## 12. Project Layout
 
 ```
-qa/pmlogsynth/
-├── pmlogsynth                  # CLI entry point
-├── profile.py                  # YAML loader and validator
-├── timeline.py                 # Phase sequencer, transition interpolation,
-│                               #   repeat expansion
-├── sampler.py                  # Gaussian noise, counter accumulation,
-│                               #   type coercion
-├── writer.py                   # libpcp_import wrapper (pmi.pmiLogImport)
-├── profiles/                   # Bundled hardware profiles
-│   ├── generic-small.yaml
-│   ├── generic-medium.yaml
-│   ├── generic-large.yaml
-│   ├── generic-xlarge.yaml
-│   ├── compute-optimized.yaml
-│   ├── memory-optimized.yaml
-│   └── storage-optimized.yaml
-└── domains/
-    ├── cpu.py
-    ├── memory.py
-    ├── disk.py
-    ├── network.py
-    └── load.py
-
-qa/
-└── NNNNN                       # QA test: uses pmlogsynth to generate a fixture,
-                                #   verifies with pmlogcheck + pmval
+pmlogsynth/                     # repository root
+├── pyproject.toml              # package metadata, dependencies, entry point
+├── README.md
+├── requirements.txt            # pinned dev dependencies
+├── pmlogsynth/                 # installable Python package
+│   ├── __init__.py
+│   ├── __main__.py             # enables: python -m pmlogsynth
+│   ├── cli.py                  # argument parsing, entry point
+│   ├── profile.py              # YAML loader and validator
+│   ├── timeline.py             # phase sequencer, transition interpolation,
+│   │                           #   repeat expansion
+│   ├── sampler.py              # Gaussian noise, counter accumulation,
+│   │                           #   type coercion
+│   ├── writer.py               # libpcp_import wrapper (pcp.pmi.pmiLogImport)
+│   ├── profiles/               # bundled hardware profiles (package data)
+│   │   ├── generic-small.yaml
+│   │   ├── generic-medium.yaml
+│   │   ├── generic-large.yaml
+│   │   ├── generic-xlarge.yaml
+│   │   ├── compute-optimized.yaml
+│   │   ├── memory-optimized.yaml
+│   │   └── storage-optimized.yaml
+│   └── domains/
+│       ├── cpu.py
+│       ├── memory.py
+│       ├── disk.py
+│       ├── network.py
+│       └── load.py
+└── tests/
+    ├── test_profile.py         # profile loading and validation
+    ├── test_timeline.py        # phase sequencing and repeat expansion
+    ├── test_sampler.py         # noise and counter accumulation
+    ├── test_domains.py         # per-domain metric consistency checks
+    └── test_writer.py          # archive generation (requires PCP installed)
 ```
 
 **User profile directory:** `~/.pcp/pmlogsynth/profiles/`
 
+### Installation
+
+```bash
+pip install pmlogsynth
+
+# Or from source:
+git clone https://github.com/<org>/pmlogsynth
+cd pmlogsynth
+pip install -e .
+```
+
+`pyproject.toml` declares the entry point:
+
+```toml
+[project.scripts]
+pmlogsynth = "pmlogsynth.cli:main"
+```
+
 ---
 
-## 11. QA Test Requirements
+## 13. Test Requirements
 
-A QA test must be included that:
+Tests are written with `pytest` and live in `tests/`. They are split into two tiers:
 
-1. Generates an archive from a known profile
-2. Runs `pmlogcheck` against the output and asserts it passes
-3. Runs `pmval` against one metric per domain and asserts the values are within
+### Tier 1 — unit tests (no PCP required)
+
+Test profile loading, validation, timeline sequencing, phase transitions, repeat
+expansion, noise application, and counter accumulation without writing any archive.
+All domain consistency constraints are verified at the value-computation level.
+These tests run anywhere Python 3.8+ is available.
+
+### Tier 2 — integration tests (PCP must be installed)
+
+Generate a real archive from a known profile, then verify it with PCP tooling:
+
+1. Run `pmlogsynth` against a fixed reference profile
+2. Run `pmlogcheck` against the output and assert it passes
+3. Run `pmval` against one metric per domain and assert values are within
    the expected range (stressor value ± noise tolerance)
-4. Validates that the archive start and end timestamps match `--start` and
-   `meta.duration`
+4. Assert the archive start and end timestamps match `--start` and `meta.duration`
 
-The test must not require a running `pmcd` or root access.
+Tier 2 tests are skipped automatically (via a pytest fixture) if `pmlogcheck` is not
+found on `PATH`. This allows the test suite to run in environments without PCP installed,
+with only Tier 1 executing.
+
+```bash
+# Run all tests
+pytest
+
+# Run only unit tests (no PCP needed)
+pytest -m "not integration"
+
+# Run with verbose output
+pytest -v
+```
 
 ---
 
-## 12. Future Enhancements
+## 14. Future Enhancements
 
 The following items are explicitly deferred from Phase 1:
 
