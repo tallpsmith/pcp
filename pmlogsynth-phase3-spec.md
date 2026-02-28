@@ -331,11 +331,11 @@ got=$(wc -l < ./results.txt)
 Phase 3 adds the following to the Phase 1 + Phase 2 layout:
 
 ```
-src/pmlogsynth/
+qa/pmlogsynth/
 ├── fleet.py                # Fleet profile loader, group expander, manifest writer
 ├── overlay.py              # Anomaly overlay merge logic
 ├── jitter.py               # Per-host deterministic value variation
-└── profiles/fleet/         # Example fleet profiles (shipped with tool)
+└── profiles/fleet/         # Example fleet profiles
     ├── small-web-cluster.yaml
     └── mixed-db-web.yaml
 

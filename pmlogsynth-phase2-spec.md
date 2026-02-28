@@ -11,7 +11,7 @@
 
 Phase 1 of `pmlogsynth` delivered a command-line tool that generates valid PCP archives
 from declarative YAML workload profiles. It ships with a library of named hardware
-profiles (bundled in `src/pmlogsynth/profiles/`, user-extensible via
+profiles (bundled in `qa/pmlogsynth/profiles/`, user-extensible via
 `~/.pcp/pmlogsynth/profiles/`) and supports multi-phase workload timelines with noise,
 linear transitions, and repeating patterns.
 
@@ -150,7 +150,7 @@ User prompt (natural language)
 The Phase 2 addition to `pmlogsynth` is small. The core client is straightforward:
 
 ```python
-# src/pmlogsynth/agent/client.py
+# qa/pmlogsynth/agent/client.py
 
 import anthropic
 import sys
@@ -234,7 +234,7 @@ the user sees the validation error and decides how to proceed.
 ## 5. The System Prompt
 
 The system prompt is the core of Phase 2. It is stored as a versioned file
-(`src/pmlogsynth/agent/system_prompt.md`) and maintained alongside the YAML schema —
+(`qa/pmlogsynth/agent/system_prompt.md`) and maintained alongside the YAML schema —
 if the schema changes, the system prompt must be updated in the same commit.
 
 ### 5.1 Contents
@@ -361,7 +361,7 @@ small, single-turn request — typically well under 2,000 output tokens.
 Phase 2 adds the following to the Phase 1 layout:
 
 ```
-src/pmlogsynth/
+qa/pmlogsynth/
 └── agent/
     ├── client.py           # Anthropic API wrapper; generate_profile()
     └── system_prompt.md    # Schema + constraints + archetypes + output instructions

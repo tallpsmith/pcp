@@ -117,7 +117,7 @@ reasonable, recognisable starting points.
 | `memory-optimized`  | 4    | 64 GB  | 1× NVMe         | 1× 10 GbE   | High RAM, modest CPU   |
 | `storage-optimized` | 4    | 16 GB  | 4× HDD          | 1× 10 GbE   | High disk capacity     |
 
-Bundled profiles live in `src/pmlogsynth/profiles/` as individual YAML files.
+Bundled profiles live in `qa/pmlogsynth/profiles/` as individual YAML files.
 
 ### 5.3 User-Defined Profiles
 
@@ -156,7 +156,7 @@ interfaces:
 ### 5.4 Build-Time Validation
 
 The build system runs a schema validation pass over all bundled profiles in
-`src/pmlogsynth/profiles/`. Any malformed profile fails the build. Content review
+`qa/pmlogsynth/profiles/`. Any malformed profile fails the build. Content review
 of contributed profiles remains a human responsibility.
 
 ---
@@ -439,7 +439,7 @@ pcp     -a ./out atop
 ## 10. File Layout
 
 ```
-src/pmlogsynth/
+qa/pmlogsynth/
 ├── pmlogsynth                  # CLI entry point
 ├── profile.py                  # YAML loader and validator
 ├── timeline.py                 # Phase sequencer, transition interpolation,
@@ -463,8 +463,8 @@ src/pmlogsynth/
     └── load.py
 
 qa/
-└── NNNNN                       # QA test: generate archive, verify with
-                                #   pmlogcheck + pmval
+└── NNNNN                       # QA test: uses pmlogsynth to generate a fixture,
+                                #   verifies with pmlogcheck + pmval
 ```
 
 **User profile directory:** `~/.pcp/pmlogsynth/profiles/`
