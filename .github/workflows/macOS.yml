@@ -403,26 +403,211 @@ jobs:
         run: |
           # Unmount any mounted PCP volumes
           hdiutil detach /Volumes/pcp* 2>/dev/null || true
-      # New steps for handling releases on version tags below
-      - name: Check if version tag
-        if: github.ref_type == 'tag'
+      # Upload build artifacts for the release job
+      - name: Upload DMG artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcp-macos-dmg
+          path: pcp-**/build/mac/pcp-*.dmg
+          retention-days: 5
+
+  # Separate release job: only runs on version tags, uses protected environment
+  release:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: macos-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - name: Check version tag format
         id: check_tag
         uses: actions-ecosystem/action-regex-match@v2
         with:
           text: ${{ github.ref_name }}
           regex: '^[0-9]+\.[0-9]+\.[0-9]+$'
-          flags: g  # Global flag, but optional if just checking match
-      - name: Generate Github Summary - version tag detected
-        if: steps.check_tag.outputs.match != ''
-        run: |
-          echo "RELEASE DETECTED!" >> $GITHUB_STEP_SUMMARY
-      - name: Generate Github Summary - no version tag
+      - name: Abort if not a version tag
         if: steps.check_tag.outputs.match == ''
         run: |
-          echo "Not a Release!" >> $GITHUB_STEP_SUMMARY
-      - name: Release
-        uses: softprops/action-gh-release@v2
+          echo "Tag '${{ github.ref_name }}' is not a version tag (expected X.Y.Z). Skipping release."
+          exit 0
+      - name: Download DMG artifact
         if: steps.check_tag.outputs.match != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: pcp-macos-dmg
+          path: artifacts
+      - name: Import Apple signing certificates
+        if: steps.check_tag.outputs.match != ''
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create a temporary keychain isolated from the system
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Decode and import the .p12 containing both certificates
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          # Make this keychain the default for signing lookups
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          # Allow codesign/productsign to use the keys without UI prompts
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Clean up the .p12 immediately
+          rm -f "$RUNNER_TEMP/certificate.p12"
+
+          # Verify both signing identities were imported
+          echo "=== Imported signing identities ==="
+          security find-identity -v "$KEYCHAIN_PATH"
+
+          echo ""
+          echo "Checking for Developer ID Application certificate..."
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" \
+            || { echo "ERROR: Developer ID Application certificate not found"; exit 1; }
+
+          echo ""
+          echo "Checking for Developer ID Installer certificate..."
+          security find-identity -v "$KEYCHAIN_PATH" | grep "Developer ID Installer" \
+            || { echo "ERROR: Developer ID Installer certificate not found"; exit 1; }
+      - name: Sign and repackage DMG
+        if: steps.check_tag.outputs.match != ''
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          # Find the unsigned DMG from the build job
+          DMG_PATH=$(find artifacts -name "pcp-*.dmg" | head -1)
+          echo "Found DMG: $DMG_PATH"
+
+          # Mount the unsigned DMG to extract the PKG
+          MOUNT_OUTPUT=$(hdiutil attach "$DMG_PATH" -nobrowse | tail -1)
+          VOLUME_PATH=$(echo "$MOUNT_OUTPUT" | awk -F'\t' '{print $NF}')
+          echo "Mounted at: $VOLUME_PATH"
+
+          UNSIGNED_PKG=$(find "$VOLUME_PATH" -name "*.pkg" | head -1)
+          echo "Found unsigned PKG: $UNSIGNED_PKG"
+
+          # Copy unsigned PKG to working directory
+          cp "$UNSIGNED_PKG" "$RUNNER_TEMP/unsigned.pkg"
+          PKG_BASENAME=$(basename "$UNSIGNED_PKG")
+          hdiutil detach "$VOLUME_PATH"
+
+          # Sign the PKG with the Developer ID Installer certificate
+          echo "Signing PKG with Developer ID Installer..."
+          productsign --sign "Developer ID Installer: $APPLE_SIGNING_IDENTITY" \
+            --timestamp \
+            "$RUNNER_TEMP/unsigned.pkg" \
+            "$RUNNER_TEMP/$PKG_BASENAME"
+
+          echo "Verifying PKG signature..."
+          pkgutil --check-signature "$RUNNER_TEMP/$PKG_BASENAME"
+
+          # Build a new signed DMG containing the signed PKG
+          DMG_BASENAME=$(basename "$DMG_PATH")
+          STAGING_DIR="$RUNNER_TEMP/dmg-staging"
+          mkdir -p "$STAGING_DIR"
+          cp "$RUNNER_TEMP/$PKG_BASENAME" "$STAGING_DIR/"
+
+          echo "Creating signed DMG..."
+          hdiutil create -volname "pcp" \
+            -srcfolder "$STAGING_DIR" \
+            -ov -format UDZO \
+            "$RUNNER_TEMP/$DMG_BASENAME"
+
+          # Sign the DMG itself with the Developer ID Application certificate
+          echo "Signing DMG with Developer ID Application..."
+          codesign --sign "Developer ID Application: $APPLE_SIGNING_IDENTITY" \
+            --timestamp \
+            "$RUNNER_TEMP/$DMG_BASENAME"
+
+          echo "Verifying DMG signature..."
+          codesign --verify --verbose "$RUNNER_TEMP/$DMG_BASENAME"
+
+          # Stage the signed DMG for notarization and release
+          cp "$RUNNER_TEMP/$DMG_BASENAME" "$GITHUB_WORKSPACE/signed-$DMG_BASENAME"
+          echo "SIGNED_DMG=signed-$DMG_BASENAME" >> "$GITHUB_ENV"
+          echo "SIGNED_PKG=$RUNNER_TEMP/$PKG_BASENAME" >> "$GITHUB_ENV"
+      - name: Notarize DMG with Apple
+        if: steps.check_tag.outputs.match != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          echo "Submitting DMG to Apple for notarization..."
+          echo "This typically takes 2-15 minutes."
+
+          xcrun notarytool submit "$SIGNED_DMG" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait \
+            --timeout 30m
+
+          echo ""
+          echo "Stapling notarization ticket to DMG..."
+          xcrun stapler staple "$SIGNED_DMG"
+
+          echo ""
+          echo "Verifying notarization..."
+          spctl --assess --type open --context context:primary-signature "$SIGNED_DMG" \
+            && echo "✓ DMG passes Gatekeeper assessment" \
+            || echo "⚠ Gatekeeper assessment returned non-zero (may be expected on CI runners)"
+      - name: Debug on signing or notarization failure
+        if: failure()
+        run: |
+          echo "=== Signing/Notarization Diagnostics ==="
+
+          echo ""
+          echo "Available signing identities:"
+          security find-identity -v "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || echo "Keychain not found"
+
+          echo ""
+          echo "DMG artifacts found:"
+          find artifacts -name "*.dmg" 2>/dev/null || echo "No artifacts"
+          find "$RUNNER_TEMP" -name "*.dmg" -o -name "*.pkg" 2>/dev/null || echo "No temp files"
+
+          echo ""
+          echo "Notarization log (if available):"
+          # Try to fetch the last submission log
+          if [ -n "$APPLE_ID" ]; then
+            xcrun notarytool log \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_ID_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              "$(xcrun notarytool history --apple-id "$APPLE_ID" --password "$APPLE_ID_PASSWORD" --team-id "$APPLE_TEAM_ID" 2>/dev/null | head -5)" \
+              2>/dev/null || echo "Could not retrieve notarization log"
+          fi
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Clean up keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+      - name: Generate release summary
+        if: steps.check_tag.outputs.match != ''
+        run: |
+          echo "## macOS Release ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- DMG: signed and notarized" >> $GITHUB_STEP_SUMMARY
+          echo "- PKG: signed with Developer ID Installer" >> $GITHUB_STEP_SUMMARY
+      - name: Create GitHub Release
+        if: steps.check_tag.outputs.match != ''
+        uses: softprops/action-gh-release@v2
         with:
           files: |
-              pcp-**/build/mac/pcp-*.dmg
+            signed-pcp-*.dmg
